@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NostrFlux - Decentralized Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080b0f;
+  --surface: #0d1218;
+  --surface2: #131920;
+  --surface3: #1a2330;
+  --border: #1e2c38;
+  --border2: #253545;
+  --accent: #e8460a;
+  --accent-glow: rgba(232,70,10,.22);
+  --live: #ff3b5c;
+  --zap: #f7b731;
+  --zap-dim: rgba(247,183,49,.12);
+  --text: #e2e8ef;
+  --text2: #8fa3b5;
+  --muted: #4a6070;
+  --green: #00d48a;
+  --purple: #9b72ff;
+  --nip05: #9b72ff;
+  --sidebar-w: 320px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+/* ======== NAV ======== */
+nav {
+  display:flex;align-items:center;gap:.6rem;
+  height:56px;padding:0 1.25rem;
+  background:rgba(8,11,15,.97);
+  border-bottom:1px solid var(--border);
+  position:fixed;top:0;left:0;right:0;z-index:500;
+  backdrop-filter:blur(16px);
+}
+
+/* Logo with JS-controlled dropdown */
+.logo-wrap{position:relative;flex-shrink:0;}
+.logo {
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;
+  letter-spacing:-.03em;display:flex;align-items:center;gap:.4rem;
+  color:var(--text);cursor:pointer;padding:.3rem .55rem;
+  border-radius:8px;transition:background .15s;user-select:none;
+  background:none;border:none;
+}
+.logo:hover{background:var(--surface2);}
+.logo.dd-open{background:var(--surface2);}
+.logo-bolt{color:var(--zap);}
+
+/* Shared dropdown style */
+.nav-dropdown {
+  position:absolute;
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:12px;padding:.5rem;
+  box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.03);
+  opacity:0;pointer-events:none;
+  transform:translateY(-4px);
+  transition:opacity .16s ease, transform .16s ease;
+  z-index:600;
+  min-width:190px;
+}
+.nav-dropdown.open {
+  opacity:1;pointer-events:all;transform:translateY(0);
+}
+#logoDropdown { top:calc(100% + 6px); left:0; }
+#profileDropdown { top:calc(100% + 6px); right:0; min-width:210px; }
+
+.dd-item {
+  display:flex;align-items:center;gap:.75rem;
+  padding:.58rem .85rem;border-radius:8px;
+  font-size:.83rem;color:var(--text2);cursor:pointer;
+  transition:background .1s;background:none;border:none;width:100%;text-align:left;font-family:'DM Sans',sans-serif;
+}
+.dd-item:hover{background:var(--surface2);color:var(--text);}
+.ddi{font-size:1rem;width:1.2rem;text-align:center;flex-shrink:0;}
+.dd-count{margin-left:auto;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--live);}
+.dd-sep{height:1px;background:var(--border);margin:.3rem 0;}
+
+/* Search */
+.search-wrap{flex:1;max-width:420px;position:relative;}
+.search-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.44rem .85rem .44rem 2.35rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.83rem;outline:none;transition:border-color .18s;}
+.search-input:focus{border-color:var(--border2);box-shadow:0 0 0 3px rgba(232,70,10,.1);}
+.search-input::placeholder{color:var(--muted);}
+.search-icon{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem;pointer-events:none;}
+.search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:.5rem;box-shadow:0 16px 48px rgba(0,0,0,.75);display:none;z-index:600;}
+.search-results.open{display:block;}
+.sr-label{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;padding:.2rem .65rem .3rem;display:block;}
+.sr-item{display:flex;align-items:center;gap:.65rem;padding:.46rem .65rem;border-radius:7px;cursor:pointer;transition:background .1s;}
+.sr-item:hover{background:var(--surface2);}
+.sr-av{width:26px;height:26px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;}
+.sr-av.rect{border-radius:5px;}
+.sr-title{font-size:.81rem;font-weight:500;}
+.sr-sub{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;}
+.sr-live{margin-left:auto;background:var(--live);color:#fff;font-family:'DM Mono',monospace;font-size:.6rem;padding:.1rem .38rem;border-radius:3px;}
+
+/* Nav right - spacer pushes profile to far right */
+.nav-mid{display:flex;align-items:center;gap:.6rem;}
+.nav-spacer{flex:1;}
+
+/* Go Live / Live button */
+.btn{padding:.42rem 1rem;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .15s;display:inline-flex;align-items:center;gap:.4rem;line-height:1;white-space:nowrap;}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:#ff5520;box-shadow:0 0 20px var(--accent-glow);}
+.btn-zap{background:var(--zap);color:#000;font-weight:700;}
+.btn-zap:hover{background:#ffca30;}
+.btn-follow{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-weight:600;}
+.btn-follow:hover{border-color:var(--accent);color:var(--accent);}
+.btn-follow.following-active{
+  border-color:var(--green);
+  color:var(--green);
+  background:rgba(0,212,138,.12);
+  box-shadow:0 0 0 1px rgba(0,212,138,.3),0 0 18px rgba(0,212,138,.26);
+  animation:followGlow 2.4s ease-in-out infinite;
+}
+@keyframes followGlow{
+  0%,100%{box-shadow:0 0 0 1px rgba(0,212,138,.32),0 0 10px rgba(0,212,138,.2);}
+  50%{box-shadow:0 0 0 1px rgba(0,212,138,.48),0 0 18px rgba(0,212,138,.35);}
+}
+.btn-live-pulse{background:var(--live);color:#fff;animation:livePulse 2.5s ease infinite;}
+@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,92,.4)}50%{box-shadow:0 0 0 6px rgba(255,59,92,0)}}
+
+/* Profile pill - locked to far right */
+.nav-profile{position:relative;flex-shrink:0;}
+.nav-user-pill{
+  display:flex;align-items:center;gap:.45rem;
+  padding:.28rem .55rem .28rem .28rem;border-radius:10px;
+  cursor:pointer;transition:background .15s;
+  border:1px solid transparent;user-select:none;
+}
+.nav-user-pill:hover{background:var(--surface2);border-color:var(--border);}
+.nav-user-pill.dd-open{background:var(--surface2);border-color:var(--border);}
+.nav-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:.88rem;overflow:hidden;flex-shrink:0;border:2px solid var(--border2);}
+.nav-display-name{font-size:.82rem;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nip05-badge{color:var(--nip05);font-size:.72rem;font-weight:700;opacity:.85;}
+
+.pd-header{padding:.65rem .85rem .75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.65rem;}
+.pd-av-lg{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;border:2px solid var(--border2);}
+.pd-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:.3rem;}
+.pd-sub{font-family:'DM Mono',monospace;font-size:.64rem;color:var(--muted);margin-top:.1rem;}
+.pd-item{display:flex;align-items:center;gap:.65rem;padding:.52rem .85rem;border-radius:7px;font-size:.82rem;color:var(--text2);cursor:pointer;transition:background .1s;width:100%;border:none;background:none;text-align:left;font-family:'DM Sans',sans-serif;}
+.pd-item:hover{background:var(--surface2);color:var(--text);}
+.pd-signout{color:var(--live);}
+.pd-signout:hover{background:rgba(255,59,92,.08)!important;}
+
+.nav-logged-out{display:flex;align-items:center;gap:.5rem;flex-shrink:0;}
+.nav-logged-in{display:none;align-items:center;flex-shrink:0;}
+.nav-logged-in.on{display:flex;}
+.nav-logged-out.off{display:none;}
+
+/* ======== PAGES ======== */
+.page{display:none;padding-top:56px;}
+.page.active{display:block;}
+#videoPage{display:none;padding-top:56px;}
+#profilePage{display:none;padding-top:56px;}
+
+/* ======== HOME ======== */
+.hero-stream{position:relative;height:450px;overflow:hidden;cursor:pointer;background:linear-gradient(160deg,#0a1520 0%,#120800 60%,#080b0f 100%);}
+.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 28% 50%,rgba(232,70,10,.11) 0%,transparent 70%),radial-gradient(ellipse 40% 80% at 80% 30%,rgba(247,183,49,.05) 0%,transparent 70%);}
+.hero-grid-ov{position:absolute;inset:0;background-image:linear-gradient(rgba(255,77,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,77,0,.04) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 70% 100% at 40% 50%,black 0%,transparent 80%);}
+.hero-player{position:absolute;left:4%;top:50%;transform:translateY(-50%);width:54%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000;border:1px solid rgba(255,255,255,.07);box-shadow:0 24px 80px rgba(0,0,0,.8);}
+.stream-visual{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:4rem;}
+.play-ov{position:absolute;inset:0;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;}
+.play-btn-big{width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:2px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:1.3rem;transition:all .2s;}
+.hero-player:hover .play-btn-big{background:rgba(232,70,10,.45);border-color:var(--accent);}
+.hero-info{position:absolute;right:2.5%;top:50%;transform:translateY(-50%);width:39%;}
+.hero-live-badge{display:inline-flex;align-items:center;gap:.4rem;background:var(--live);color:#fff;font-family:'DM Mono',monospace;font-size:.67rem;padding:.22rem .55rem;border-radius:4px;letter-spacing:.04em;margin-bottom:.65rem;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#fff;animation:dotP 1.2s ease infinite;}
+@keyframes dotP{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+.hero-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;line-height:1.2;letter-spacing:-.02em;margin-bottom:.4rem;}
+.hero-host{display:flex;align-items:center;gap:.5rem;font-size:.81rem;color:var(--text2);margin-bottom:.65rem;}
+.hero-av{width:24px;height:24px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.75rem;}
+.hero-summary{font-size:.82rem;color:var(--text2);line-height:1.6;margin-bottom:.85rem;}
+.hero-stats{display:flex;gap:1.1rem;margin-bottom:1rem;}
+.h-stat .val{font-family:'DM Mono',monospace;font-size:.8rem;font-weight:500;color:var(--text);}
+.h-stat .lbl{font-size:.67rem;color:var(--muted);}
+.h-stat.zap .val{color:var(--zap);}
+.hero-actions{display:flex;gap:.5rem;}
+
+.cat-strip{padding:.6rem 1.25rem;border-bottom:1px solid var(--border);background:var(--surface);display:flex;gap:.4rem;overflow-x:auto;scrollbar-width:none;}
+.cat-strip::-webkit-scrollbar{display:none;}
+.cat-chip{flex-shrink:0;padding:.28rem .75rem;border-radius:20px;font-size:.76rem;font-weight:500;cursor:pointer;border:1px solid var(--border2);color:var(--text2);background:transparent;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap;}
+.cat-chip:hover,.cat-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+.home-layout{display:grid;grid-template-columns:185px 1fr;}
+.left-sidebar{background:var(--surface);border-right:1px solid var(--border);padding:.8rem .6rem;}
+.sb-sec{margin-bottom:1.05rem;}
+.sb-label{font-family:'DM Mono',monospace;font-size:.61rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;padding:.2rem .45rem;margin-bottom:.28rem;display:block;}
+.sb-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .5rem;border-radius:7px;font-size:.79rem;color:var(--text2);cursor:pointer;transition:all .12s;}
+.sb-link:hover{background:var(--surface2);color:var(--text);}
+.sb-live .live-ind{width:7px;height:7px;border-radius:50%;background:var(--live);flex-shrink:0;animation:dotP 1.2s ease infinite;}
+.sb-av{width:22px;height:22px;border-radius:50%;background:var(--surface3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;}
+
+.stream-main{padding:1rem 1.2rem;}
+.sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;}
+.sec-hd h2{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;}
+.see-all{font-size:.75rem;color:var(--muted);cursor:pointer;}.see-all:hover{color:var(--text);}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem;}
+.stream-card{cursor:pointer;border-radius:10px;transition:transform .15s;}
+.stream-card:hover{transform:translateY(-2px);}
+.stream-card:hover .ct-inner{border-color:var(--accent);}
+.ct{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;}
+.ct-inner{width:100%;height:100%;border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s;}
+.tc{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;}
+.t1{background:linear-gradient(135deg,#12001a,#2d0040);}
+.t2{background:linear-gradient(135deg,#001520,#003055);}
+.t3{background:linear-gradient(135deg,#0a1200,#1e3000);}
+.t4{background:linear-gradient(135deg,#1a0800,#3d1200);}
+.t5{background:linear-gradient(135deg,#00101a,#002040);}
+.t6{background:linear-gradient(135deg,#150020,#350055);}
+.t7{background:linear-gradient(135deg,#001a10,#003520);}
+.t8{background:linear-gradient(135deg,#1a0000,#3d0000);}
+.cb-live{position:absolute;top:6px;left:6px;background:var(--live);color:#fff;font-family:'DM Mono',monospace;font-size:.6rem;padding:.13rem .42rem;border-radius:3px;display:flex;align-items:center;gap:.25rem;}
+.cb-viewers{position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,.75);color:var(--text);font-family:'DM Mono',monospace;font-size:.6rem;padding:.13rem .42rem;border-radius:3px;}
+.ci{padding:.52rem .08rem .08rem;}
+.ci-row{display:flex;gap:.48rem;}
+.ci-av{width:28px;height:28px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem;border:1px solid var(--border);}
+.ci-title{font-size:.79rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.ci-host{font-size:.71rem;color:var(--text2);margin-top:.13rem;}
+.ci-tags{display:flex;gap:.3rem;margin-top:.22rem;flex-wrap:wrap;}
+.tag{font-size:.62rem;color:var(--text2);background:var(--surface2);padding:.08rem .36rem;border-radius:3px;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.stream-card{animation:fadeUp .3s ease both;}
+.stream-card:nth-child(1){animation-delay:.04s}.stream-card:nth-child(2){animation-delay:.08s}.stream-card:nth-child(3){animation-delay:.12s}.stream-card:nth-child(4){animation-delay:.16s}
+
+/* ======== VIDEO PAGE ======== */
+.video-layout{display:grid;grid-template-columns:1fr var(--sidebar-w);height:calc(100vh - 56px);}
+.video-col{overflow-y:auto;display:flex;flex-direction:column;}
+.player-wrap{position:relative;background:#000;width:100%;aspect-ratio:16/9;flex-shrink:0;}
+.player-bg{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:5rem;background:linear-gradient(135deg,#0a1a28,#180600,#080b12);}
+.player-ui{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 40%);padding:.8rem .95rem;}
+.pctrl-row{display:flex;align-items:center;gap:.6rem;}
+.pc{background:none;border:none;color:#fff;font-size:.95rem;cursor:pointer;padding:.2rem;opacity:.8;transition:opacity .15s;line-height:1;}
+.pc:hover{opacity:1;}
+.pvol{flex:0 0 68px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;cursor:pointer;position:relative;}
+.pvol-f{position:absolute;left:0;top:0;bottom:0;width:65%;background:#fff;border-radius:2px;}
+.spacer{flex:1;}
+.p-live{background:var(--live);color:#fff;font-family:'DM Mono',monospace;font-size:.62rem;padding:.17rem .45rem;border-radius:4px;display:flex;align-items:center;gap:.28rem;}
+.end-stream-btn{background:rgba(255,59,92,.15);border:1px solid rgba(255,59,92,.4);color:var(--live);font-size:.72rem;font-weight:600;padding:.28rem .65rem;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;align-items:center;gap:.3rem;display:none;}
+.end-stream-btn.visible{display:flex;}
+.end-stream-btn:hover{background:rgba(255,59,92,.3);}
+
+/* Stream info */
+.sib{padding:.85rem .95rem;border-bottom:1px solid var(--border);}
+
+/* Title row with edit pencil */
+.editable-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.65rem;}
+.sib-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.12rem;letter-spacing:-.02em;}
+.edit-pencil{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.82rem;padding:.18rem .3rem;border-radius:5px;transition:all .15s;opacity:.6;line-height:1;}
+.edit-pencil:hover{background:var(--surface2);color:var(--text);opacity:1;}
+.owner-only{display:none;}
+.owner-only.visible{display:flex;}
+
+/* Host row */
+.sib-host-row{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;}
+.sib-av{width:40px;height:40px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:1.1rem;border:2px solid var(--border2);flex-shrink:0;cursor:pointer;transition:border-color .15s;}
+.sib-av:hover{border-color:var(--accent);}
+.sib-host-info{flex:1;min-width:0;}
+.sib-name{font-weight:700;font-size:.92rem;font-family:'Syne',sans-serif;display:flex;align-items:center;gap:.3rem;}
+.sib-identity{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);margin-top:.06rem;}
+.nip05-text{color:var(--nip05);}
+
+/* Action buttons row (Zap, Follow, Share, Like, Report) */
+.sib-actions-row{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin-left:auto;}
+.action-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.33rem .7rem;cursor:pointer;font-size:.77rem;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:.27rem;transition:all .15s;font-weight:500;}
+.action-btn:hover{border-color:var(--border2);color:var(--text);}
+.action-btn.like-btn:hover,.action-btn.liked{border-color:var(--live);color:var(--live);background:rgba(255,59,92,.08);}
+.action-btn.share-btn:hover{border-color:var(--green);color:var(--green);}
+.action-btn.report-btn:hover{border-color:rgba(255,100,50,.5);color:rgba(255,100,50,.8);}
+
+/* Stats row - followers now included here */
+.sib-stats-row{display:flex;gap:1rem;margin-top:.65rem;padding-top:.6rem;border-top:1px solid var(--border);align-items:center;flex-wrap:wrap;}
+.ss{font-size:.78rem;display:flex;align-items:center;gap:.28rem;}
+.ss .n{font-weight:600;font-family:'DM Mono',monospace;}
+.ss .l{color:var(--text2);font-size:.72rem;}
+.ss.zap .n{color:var(--zap);}
+.ss.lv .n{color:var(--live);}
+.ss.fol .n{color:var(--purple);}
+
+/* Summary with edit pencil */
+.editable-block{position:relative;}
+.editable-block:hover .block-pencil{opacity:.6;}
+.block-pencil{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.78rem;padding:.15rem .28rem;border-radius:5px;transition:all .15s;opacity:0;line-height:1;position:absolute;top:0;right:0;}
+.block-pencil:hover{background:var(--surface2);color:var(--text);opacity:1!important;}
+.sib-summary{font-size:.81rem;color:var(--text2);line-height:1.6;padding-right:1.5rem;}
+
+/* Recommended */
+.reco{padding:.8rem .95rem;}
+.reco-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.83rem;margin-bottom:.55rem;color:var(--text2);}
+.reco-item{display:flex;gap:.65rem;align-items:center;cursor:pointer;padding:.42rem .45rem;border-radius:8px;transition:background .12s;margin-bottom:.12rem;}
+.reco-item:hover{background:var(--surface2);}
+.reco-thumb{width:108px;aspect-ratio:16/9;border-radius:6px;overflow:hidden;flex-shrink:0;}
+.reco-text .rt{font-size:.79rem;font-weight:600;line-height:1.3;}
+.reco-text .rs{font-size:.71rem;color:var(--text2);margin-top:.14rem;}
+
+/* ======== MINI PLAYER ======== */
+.mini-player{position:fixed;bottom:1.2rem;right:1.2rem;width:280px;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);z-index:300;cursor:pointer;display:none;transition:transform .2s;}
+.mini-player:hover{transform:scale(1.02);}
+.mini-player.visible{display:block;animation:popIn .25s cubic-bezier(.4,0,.2,1);}
+@keyframes popIn{from{opacity:0;transform:scale(.85) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.mini-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2.8rem;background:linear-gradient(135deg,#0a1a28,#180600);}
+.mini-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.9),transparent);padding:.45rem .6rem;display:flex;align-items:center;justify-content:space-between;}
+.mini-title{font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
+.mini-live{background:var(--live);color:#fff;font-family:'DM Mono',monospace;font-size:.58rem;padding:.1rem .35rem;border-radius:3px;display:flex;align-items:center;gap:.2rem;}
+.mini-close{background:rgba(0,0,0,.5);border:none;color:#fff;cursor:pointer;font-size:.75rem;padding:.2rem .35rem;border-radius:4px;line-height:1;}
+
+/* ======== SIDEBAR / CHAT ======== */
+.stream-sidebar{border-left:1px solid var(--border);display:flex;flex-direction:column;height:calc(100vh - 56px);position:sticky;top:56px;overflow:hidden;}
+.stabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.stab{flex:1;padding:.62rem;text-align:center;font-size:.76rem;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;}
+.stab.active{color:var(--text);border-bottom-color:var(--accent);}
+.chat-scroll{flex:1;overflow-y:auto;padding:.65rem;display:flex;flex-direction:column;gap:.4rem;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+.cmsg{display:flex;gap:.4rem;align-items:flex-start;position:relative;}
+.cmsg:hover .chat-msg-actions{opacity:1;pointer-events:all;}
+.c-av{width:22px;height:22px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;border:1px solid var(--border);cursor:pointer;transition:border-color .15s;}
+.c-av:hover{border-color:var(--accent);}
+.c-body{flex:1;}
+.c-name-row{display:flex;align-items:center;gap:.28rem;flex-wrap:wrap;}
+.c-name{font-size:.7rem;font-weight:600;cursor:pointer;}
+.c-name:hover{text-decoration:underline;}
+.c-name.co{color:var(--accent);}
+.c-name.cp{color:var(--purple);}
+.c-name.cg{color:var(--green);}
+.c-name.cz{color:var(--zap);}
+.c-nip05{color:var(--nip05);font-size:.64rem;font-weight:700;opacity:.75;}
+.c-text{font-size:.77rem;line-height:1.45;color:var(--text);margin-top:.07rem;}
+.chat-msg-actions{position:absolute;right:0;top:-4px;display:flex;gap:.18rem;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:.2rem .28rem;opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:10;}
+.cma-btn{background:none;border:none;cursor:pointer;font-size:.73rem;padding:.1rem .18rem;border-radius:4px;color:var(--muted);transition:all .12s;line-height:1;}
+.cma-btn:hover{background:var(--surface2);color:var(--text);}
+.cma-btn.zap-cma:hover{color:var(--zap);}
+.cma-btn.like-cma:hover{color:var(--live);}
+.zap-ev{background:linear-gradient(135deg,rgba(247,183,49,.08),rgba(247,183,49,.03));border:1px solid rgba(247,183,49,.18);border-radius:8px;padding:.48rem .68rem;}
+.zap-ev .c-text{color:var(--zap);}
+
+/* Emoji picker */
+.emoji-picker{position:absolute;bottom:calc(100% + 8px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:.55rem;box-shadow:0 12px 40px rgba(0,0,0,.6);display:none;z-index:200;width:224px;}
+.emoji-picker.open{display:block;animation:fadeUp .15s ease;}
+.ep-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.15rem;}
+.ep-emoji{font-size:1.1rem;text-align:center;padding:.2rem;border-radius:5px;cursor:pointer;transition:background .1s;line-height:1.4;}
+.ep-emoji:hover{background:var(--surface2);}
+
+.viewers-panel{padding:.65rem;display:none;flex-direction:column;gap:.38rem;overflow-y:auto;flex:1;}
+.viewers-panel.on{display:flex;}
+.vr{display:flex;align-items:center;gap:.52rem;padding:.35rem .42rem;border-radius:7px;cursor:pointer;}
+.vr:hover{background:var(--surface2);}
+.v-av{width:26px;height:26px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;}
+.v-name{font-size:.79rem;font-weight:500;display:flex;align-items:center;gap:.28rem;}
+.v-npub{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);}
+.v-badge{margin-left:auto;font-size:.62rem;padding:.12rem .36rem;border-radius:3px;font-family:'DM Mono',monospace;}
+.vb-z{background:var(--zap-dim);color:var(--zap);}
+.vb-l{background:rgba(255,59,92,.12);color:var(--live);}
+
+/* Chat bottom */
+.chat-bottom{border-top:1px solid var(--border);flex-shrink:0;}
+.chat-iw{padding:.55rem .65rem .32rem;}
+.chat-inp{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.48rem .72rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.78rem;outline:none;transition:border-color .15s;resize:none;display:block;line-height:1.4;}
+.chat-inp:focus{border-color:var(--accent);}
+.chat-inp::placeholder{color:var(--muted);}
+.chat-acts{display:flex;align-items:center;gap:.38rem;padding:.28rem .65rem .55rem;position:relative;}
+.ca-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.3rem .62rem;cursor:pointer;font-size:.75rem;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:.25rem;transition:all .15s;font-weight:500;}
+.ca-btn:hover{border-color:var(--border2);color:var(--text);}
+.ca-btn.zap-ca:hover{border-color:var(--zap);color:var(--zap);}
+.chat-send-btn{padding:.35rem .82rem;background:var(--accent);border:none;border-radius:7px;cursor:pointer;color:#fff;font-size:.78rem;font-weight:600;font-family:'DM Sans',sans-serif;transition:all .15s;margin-left:auto;}
+.chat-send-btn:hover{background:#ff5520;}
+
+/* ======== PROFILE PAGE ======== */
+.profile-hero{height:170px;background:linear-gradient(135deg,#0d1e30,#1a0a00,#100015);position:relative;overflow:hidden;border-bottom:1px solid var(--border);z-index:0;}
+.profile-banner-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.92;display:none;}
+.profile-content{position:relative;z-index:2;padding:0 1.5rem 1.5rem;}
+.profile-top{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(290px,.95fr);gap:1rem;margin:-34px 0 .95rem;align-items:start;}
+.profile-left-stack{display:grid;grid-template-rows:auto minmax(170px,1fr);gap:.85rem;min-width:0;}
+.profile-head-row{display:flex;align-items:flex-start;gap:.78rem;min-width:0;}
+.profile-av-wrap{margin-top:-14px;display:inline-flex;position:relative;z-index:4;flex-shrink:0;}
+.profile-av-big{width:98px;height:98px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:2.45rem;border:3px solid var(--bg);transition:box-shadow .18s,border-color .18s;}
+.profile-identity-box,.profile-bio-box,.profile-action-box,.profile-inline-meta{
+  background:rgba(20,26,33,.78);
+  border:1px solid rgba(255,255,255,.09);
+  backdrop-filter:blur(8px);
+  border-radius:12px;
+}
+.profile-identity-box{padding:.72rem .82rem;min-width:0;max-width:720px;}
+.profile-identity-box.nip05-verified{
+  background:rgba(74,50,108,.68);
+  border-color:rgba(155,114,255,.62);
+  box-shadow:0 0 0 1px rgba(155,114,255,.28),0 12px 26px rgba(90,54,144,.24);
+}
+.profile-av-big.nip05-verified{
+  box-shadow:0 0 0 2px rgba(155,114,255,.45),0 0 16px rgba(155,114,255,.35);
+  border-color:rgba(155,114,255,.72);
+}
+.profile-name-row{display:flex;align-items:center;gap:.45rem;min-width:0;}
+.profile-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1.3rem;line-height:1.2;}
+.profile-nip05{font-family:'DM Mono',monospace;font-size:.74rem;color:var(--nip05);display:flex;align-items:center;gap:.3rem;margin-top:.18rem;}
+.profile-npub{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-top:.2rem;word-break:break-all;}
+.profile-bio-box{padding:.72rem .82rem;height:100%;display:flex;flex-direction:column;}
+.profile-bio{font-size:.85rem;color:var(--text2);line-height:1.6;margin:0;max-width:none;white-space:pre-wrap;word-break:break-word;}
+.profile-bio.clamped{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;}
+.profile-show-more{margin-top:.46rem;background:transparent;border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:.7rem;padding:.25rem .55rem;cursor:pointer;align-self:flex-start;}
+.profile-show-more:hover{border-color:var(--accent);color:var(--accent);}
+.profile-bio-links{display:flex;flex-wrap:wrap;gap:.42rem;margin-top:.58rem;}
+.profile-bio-meta{display:flex;align-items:center;gap:.36rem;padding:.23rem .48rem;border:1px solid var(--border);border-radius:999px;background:var(--surface2);font-size:.7rem;color:var(--text2);}
+.profile-bio-meta .lbl{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);}
+.profile-bio-meta .val{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--text);word-break:break-all;}
+.profile-bio-meta a{color:var(--accent);text-decoration:none;word-break:break-all;}
+.profile-since{margin-top:auto;padding-top:.58rem;font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);}
+.profile-right-stack{display:grid;grid-template-rows:auto minmax(170px,1fr);gap:.85rem;align-items:stretch;}
+.profile-action-box{padding:.56rem .64rem;margin-top:10px;justify-self:end;width:max-content;max-width:100%;}
+.profile-actions-row{display:flex;align-items:center;justify-content:flex-end;gap:.38rem;flex-wrap:wrap;}
+.profile-inline-meta{display:grid;gap:.5rem;max-width:none;margin-top:0;padding:.64rem .68rem;height:100%;align-content:start;}
+.profile-inline-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.42rem;margin-top:.2rem;}
+.pis{padding:.42rem .45rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);}
+.pis .iv{font-family:'DM Mono',monospace;font-weight:600;font-size:.86rem;color:var(--text);}
+.pis .il{font-size:.67rem;color:var(--muted);margin-top:.14rem;}
+.profile-main-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(290px,.95fr);gap:1rem;margin-top:1rem;align-items:start;}
+.profile-col,.profile-side{display:flex;flex-direction:column;gap:1rem;}
+.profile-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem;}
+.profile-sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;}
+.profile-sec-head h3{font-family:'Syne',sans-serif;font-size:.92rem;font-weight:700;}
+.profile-sec-head span{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);}
+.profile-live-player{aspect-ratio:16/9;border:1px solid var(--border2);background:#000;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:.78rem;color:var(--text2);}
+.profile-live-foot{display:flex;justify-content:flex-end;margin-top:.55rem;}
+.profile-feed-list{display:flex;flex-direction:column;gap:.65rem;}
+.profile-feed-item{padding:.72rem .75rem;border-radius:10px;border:1px solid var(--border);background:var(--surface2);}
+.profile-feed-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.44rem;}
+.profile-feed-author{display:flex;align-items:flex-start;gap:.5rem;min-width:0;}
+.profile-feed-av{width:34px;height:34px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.82rem;overflow:hidden;}
+.profile-feed-meta{min-width:0;}
+.profile-feed-name{font-weight:700;color:var(--text);font-size:.78rem;line-height:1.2;}
+.profile-feed-time{font-family:'DM Mono',monospace;font-size:.64rem;color:var(--muted);white-space:nowrap;margin-top:.08rem;}
+.profile-feed-text{font-size:.82rem;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-break:break-word;}
+.profile-feed-media{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-top:.56rem;}
+.profile-feed-media.one{grid-template-columns:1fr;}
+.profile-feed-photo,.profile-feed-video{border-radius:10px;overflow:hidden;border:1px solid var(--border2);background:#090d12;display:flex;align-items:center;justify-content:center;min-height:120px;}
+.profile-feed-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.profile-feed-video video{width:100%;height:100%;max-height:320px;object-fit:cover;display:block;background:#000;}
+.profile-feed-video a{color:var(--zap);font-size:.74rem;text-decoration:none;font-weight:600;}
+.profile-feed-stats{display:flex;flex-wrap:wrap;gap:.44rem;margin-top:.55rem;}
+.pfs{padding:.17rem .42rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02);font-size:.66rem;color:var(--text2);font-family:'DM Mono',monospace;}
+.pfs strong{color:var(--text);font-weight:600;}
+.profile-feed-comments{display:flex;flex-direction:column;gap:.4rem;margin-top:.56rem;padding-top:.5rem;border-top:1px solid var(--border);}
+.profile-comment-item{display:flex;align-items:flex-start;gap:.45rem;}
+.profile-comment-av{width:24px;height:24px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.68rem;overflow:hidden;flex-shrink:0;}
+.profile-comment-main{min-width:0;flex:1;}
+.profile-comment-meta{display:flex;align-items:center;gap:.36rem;}
+.profile-comment-meta .n{font-size:.7rem;font-weight:600;color:var(--text);}
+.profile-comment-meta .t{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);}
+.profile-comment-text{font-size:.75rem;color:var(--text2);line-height:1.45;word-break:break-word;white-space:pre-wrap;}
+.profile-comment-empty{font-size:.7rem;color:var(--muted);}
+.profile-comments-more{background:transparent;border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:.68rem;padding:.24rem .48rem;cursor:pointer;align-self:flex-start;}
+.profile-comments-more:hover{border-color:var(--accent);color:var(--accent);}
+.profile-comment-form{display:flex;align-items:flex-end;gap:.4rem;margin-top:.5rem;}
+.profile-comment-input{flex:1;min-height:36px;max-height:90px;background:#0f141b;border:1px solid var(--border2);border-radius:8px;padding:.38rem .52rem;color:var(--text);font-size:.75rem;font-family:'DM Sans',sans-serif;resize:vertical;}
+.profile-comment-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,70,10,.18);}
+.profile-comment-btn{background:var(--surface3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:.72rem;padding:.33rem .62rem;cursor:pointer;font-weight:600;}
+.profile-comment-btn:hover{border-color:var(--accent);color:var(--accent);}
+.profile-feed-empty{font-size:.78rem;color:var(--muted);padding:.75rem;border:1px dashed var(--border2);border-radius:8px;}
+.profile-media-card{padding:.72rem;}
+.profile-tab-row{display:flex;gap:.34rem;flex-wrap:wrap;padding:.24rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:.62rem;}
+.profile-tab{flex:1;background:transparent;border:1px solid transparent;border-radius:8px;padding:.38rem .5rem;cursor:pointer;color:var(--text2);font-size:.72rem;font-weight:600;}
+.profile-tab.active{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+.profile-tab-pane{display:none;}
+.profile-tab-pane.on{display:block;}
+.profile-media-list{display:flex;flex-direction:column;gap:.58rem;}
+.profile-stream-item{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.58rem .62rem;background:var(--surface2);border:1px solid var(--border);border-radius:9px;}
+.profile-stream-title{font-size:.8rem;color:var(--text);font-weight:600;line-height:1.4;}
+.profile-stream-meta{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);margin-top:.22rem;}
+.profile-video-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.58rem;}
+.profile-video-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.profile-video-frame{aspect-ratio:9/16;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.profile-video-frame video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+.profile-video-fallback{font-size:.72rem;color:var(--text2);padding:.72rem;text-align:center;}
+.profile-video-meta{padding:.45rem .5rem;}
+.profile-video-caption{font-size:.74rem;color:var(--text2);line-height:1.45;max-height:3.1em;overflow:hidden;}
+.profile-video-time{font-family:'DM Mono',monospace;font-size:.64rem;color:var(--muted);margin-top:.24rem;}
+.profile-photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;}
+.profile-photo-card{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:#0b0f14;aspect-ratio:1/1;}
+.profile-photo-card img{width:100%;height:100%;object-fit:cover;display:block;}
+.profile-photo-cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,rgba(0,0,0,.65),rgba(0,0,0,0));color:#d8e1ea;font-size:.64rem;padding:.5rem .45rem .35rem;line-height:1.4;max-height:3.6em;overflow:hidden;}
+.pmeta-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.55rem;font-size:.76rem;color:var(--text2);}
+.pmeta-row span:first-child{font-family:'DM Mono',monospace;color:var(--muted);}
+.pmeta-row code{font-family:'DM Mono',monospace;color:var(--text);font-size:.68rem;word-break:break-all;}
+.pmeta-row a{color:var(--accent);text-decoration:none;word-break:break-all;}
+
+@media (max-width: 1024px){
+  .profile-top{grid-template-columns:1fr;}
+  .profile-main-grid{grid-template-columns:1fr;}
+  .profile-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .profile-inline-stats{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .profile-action-box{justify-self:start;margin-top:0;width:100%;}
+  .profile-actions-row{justify-content:flex-start;}
+}
+@media (max-width: 860px){
+  .profile-video-grid{grid-template-columns:1fr;}
+}
+@media (max-width: 680px){
+  .profile-content{padding:0 1rem 1rem;}
+  .profile-head-row{align-items:center;}
+  .profile-av-wrap{margin-top:-10px;}
+  .profile-av-big{width:90px;height:90px;font-size:2.1rem;}
+}
+
+/* ======== MODALS ======== */
+.modal-ov{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:rgba(5,8,12,.88);backdrop-filter:blur(18px) saturate(.55);}
+.modal-ov.open{display:flex;animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:18px;width:min(580px,94vw);max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 40px 120px rgba(0,0,0,.9);animation:slideUp .25s cubic-bezier(.4,0,.2,1);}
+@keyframes slideUp{from{transform:translateY(22px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--zap));border-radius:18px 18px 0 0;}
+.mhd{padding:1.35rem 1.35rem 0;display:flex;align-items:flex-start;justify-content:space-between;}
+.mtitle{font-family:'Syne',sans-serif;font-weight:800;font-size:1.08rem;display:flex;align-items:center;gap:.42rem;}
+.mi{color:var(--accent);}
+.mclose{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:.2rem .32rem;border-radius:6px;transition:all .15s;line-height:1;}
+.mclose:hover{background:var(--surface2);color:var(--text);}
+.msub{font-size:.77rem;color:var(--muted);padding:.18rem 1.35rem .08rem;}
+.mbody{padding:1.05rem 1.35rem;}
+.fg-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;}
+.fg{display:flex;flex-direction:column;gap:.32rem;}
+.fg.full{grid-column:1/-1;}
+label{font-size:.67rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace;}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:.5rem .8rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.83rem;outline:none;transition:border-color .18s,box-shadow .18s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+input::placeholder,textarea::placeholder{color:var(--muted);}
+select option{background:var(--surface2);}
+textarea{resize:vertical;min-height:65px;line-height:1.5;}
+.srow{display:flex;gap:.42rem;}
+.sc{padding:.3rem .75rem;border-radius:7px;font-size:.76rem;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;}
+.sc.sl{border-color:var(--live);color:var(--live);background:rgba(255,59,92,.1);}
+.relay-bar{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--green);background:rgba(0,212,138,.05);border:1px solid rgba(0,212,138,.13);border-radius:8px;padding:.48rem .72rem;margin-top:.18rem;display:flex;align-items:center;gap:.32rem;}
+.mfooter{padding:.85rem 1.35rem 1.35rem;display:flex;gap:.55rem;justify-content:flex-end;border-top:1px solid var(--border);}
+.msuccess{display:none;padding:1.8rem 1.5rem;text-align:center;}
+.msuccess.on{display:block;}
+.succ-icon{font-size:2.6rem;margin-bottom:.6rem;}
+.succ-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.12rem;margin-bottom:.4rem;}
+.succ-text{font-size:.82rem;color:var(--text2);line-height:1.6;}
+
+/* Login modal */
+.login-modal{background:var(--surface);border:1px solid var(--border2);border-radius:18px;width:min(410px,94vw);position:relative;box-shadow:0 40px 120px rgba(0,0,0,.9);animation:slideUp .25s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.login-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--purple),var(--accent));border-radius:18px 18px 0 0;}
+.lm-hd{padding:1.35rem 1.35rem .85rem;text-align:center;}
+.lm-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;margin-bottom:.12rem;display:flex;align-items:center;justify-content:center;gap:.38rem;}
+.lm-lb{color:var(--zap);}
+.lm-sub{font-size:.78rem;color:var(--muted);}
+.lm-body{padding:.2rem 1.2rem 1.35rem;}
+.lm-sec{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.45rem;margin-top:.8rem;}
+.lo{display:flex;align-items:center;gap:.82rem;padding:.82rem .95rem;border-radius:12px;cursor:pointer;border:1px solid var(--border2);background:var(--surface2);transition:all .18s;margin-bottom:.45rem;}
+.lo:hover{border-color:var(--accent);background:var(--surface3);}
+.lo:hover .lo-arr{opacity:1;transform:translateX(0);}
+.lo-ico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0;}
+.lo-ico.ext{background:linear-gradient(135deg,rgba(155,114,255,.2),rgba(155,114,255,.05));border:1px solid rgba(155,114,255,.2);}
+.lo-ico.hw{background:linear-gradient(135deg,rgba(0,212,138,.15),rgba(0,212,138,.05));border:1px solid rgba(0,212,138,.2);}
+.lo-ico.new{background:linear-gradient(135deg,rgba(0,212,138,.2),rgba(0,212,138,.05));border:1px solid rgba(0,212,138,.2);}
+.lo-t{font-size:.88rem;font-weight:600;}
+.lo-d{font-size:.73rem;color:var(--muted);margin-top:.08rem;line-height:1.4;}
+.lo-arr{margin-left:auto;color:var(--muted);font-size:.88rem;opacity:0;transform:translateX(-4px);transition:all .15s;}
+.lm-div{display:flex;align-items:center;gap:.7rem;margin:.55rem 0;}
+.lm-div span{font-size:.7rem;color:var(--muted);white-space:nowrap;}
+.lm-div::before,.lm-div::after{content:'';flex:1;height:1px;background:var(--border);}
+.key-wrap{display:flex;flex-direction:column;gap:.42rem;margin-bottom:.45rem;}
+.key-inp{font-family:'DM Mono',monospace;font-size:.74rem;}
+.key-inp::placeholder{font-family:'DM Mono',monospace;}
+.lm-warn{font-size:.71rem;color:var(--muted);display:flex;align-items:flex-start;gap:.38rem;line-height:1.4;background:rgba(232,70,10,.06);border:1px solid rgba(232,70,10,.12);border-radius:7px;padding:.48rem .62rem;margin-top:.12rem;}
+.lm-close{position:absolute;top:.95rem;right:.95rem;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:.2rem .32rem;border-radius:6px;transition:all .15s;line-height:1;}
+.lm-close:hover{background:var(--surface2);color:var(--text);}
+
+/* Settings / FAQ modals */
+.settings-modal{background:var(--surface);border:1px solid var(--border2);border-radius:18px;width:min(520px,94vw);max-height:85vh;overflow-y:auto;position:relative;box-shadow:0 40px 120px rgba(0,0,0,.9);animation:slideUp .25s cubic-bezier(.4,0,.2,1);}
+.settings-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--purple),var(--green));border-radius:18px 18px 0 0;}
+.sm-hd{padding:1.35rem 1.35rem .5rem;display:flex;align-items:center;justify-content:space-between;}
+.sm-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.08rem;}
+.sm-body{padding:.5rem 1.35rem 1.35rem;}
+.sm-section{margin-bottom:1.2rem;}
+.sm-sec-title{font-family:'DM Mono',monospace;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.55rem;}
+.sm-row{display:flex;align-items:center;justify-content:space-between;padding:.62rem .8rem;border-radius:9px;background:var(--surface2);border:1px solid var(--border);margin-bottom:.38rem;}
+.sm-row-label{font-size:.83rem;font-weight:500;}
+.sm-row-desc{font-size:.72rem;color:var(--muted);margin-top:.05rem;}
+.toggle{width:38px;height:20px;border-radius:10px;background:var(--border2);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;}
+.toggle.on{background:var(--accent);}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s;}
+.toggle.on::after{transform:translateX(18px);}
+.relay-tag{display:inline-flex;align-items:center;gap:.35rem;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;padding:.3rem .6rem;font-family:'DM Mono',monospace;font-size:.72rem;margin:.2rem .2rem 0 0;}
+.relay-tag .rem{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.7rem;padding:0;line-height:1;}
+.relay-tag .rem:hover{color:var(--live);}
+.relay-add-row{display:flex;gap:.5rem;margin-top:.5rem;}
+.relay-add-row input{flex:1;font-family:'DM Mono',monospace;font-size:.75rem;}
+.sm-save-row{display:flex;justify-content:flex-end;padding-top:.2rem;}
+#settingsRelayList{display:flex;flex-wrap:wrap;}
+#settingsRelayList .relay-tag{margin-bottom:.35rem;}
+
+body.hide-nip05 .nip05-badge,
+body.hide-nip05 .c-nip05{display:none!important;}
+body.hide-zap-notices .zap-ev{display:none!important;}
+body.compact-chat .cmsg{padding:.38rem .46rem;}
+body.no-chat-anim .cmsg{animation:none!important;}
+.faq-item{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:.4rem;}
+.faq-q{display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;cursor:pointer;font-size:.83rem;font-weight:500;transition:background .12s;}
+.faq-q:hover{background:var(--surface2);}
+.faq-chevron{transition:transform .2s;color:var(--muted);font-size:.75rem;}
+.faq-a{font-size:.79rem;color:var(--text2);line-height:1.6;padding:0 .85rem;max-height:0;overflow:hidden;transition:max-height .25s ease,padding .25s;}
+.faq-item.open .faq-a{max-height:200px;padding:.1rem .85rem .75rem;}
+.faq-item.open .faq-chevron{transform:rotate(180deg);}
+
+/* End confirm */
+.end-confirm-modal{background:var(--surface);border:1px solid rgba(255,59,92,.3);border-radius:16px;width:min(340px,94vw);padding:1.5rem;text-align:center;animation:slideUp .2s ease;position:relative;}
+.end-confirm-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--live);border-radius:16px 16px 0 0;}
+
+/* footer */
+footer{padding:1rem 1.2rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);}
+footer .flogo{font-family:'Syne',sans-serif;font-weight:800;font-size:.95rem;display:flex;align-items:center;gap:.32rem;}
+footer p{font-size:.72rem;color:var(--muted);}
+.nostr-pill{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--purple);background:rgba(155,114,255,.1);border:1px solid rgba(155,114,255,.2);border-radius:4px;padding:.17rem .48rem;}
+</style>
+</head>
+<body>
+
+<!-- ========= NAV ========= -->
+<nav>
+  <!-- Logo (left) -->
+  <div class="logo-wrap">
+    <button class="logo" id="logoBtn"><span class="logo-bolt"></span>NostrFlux</button>
+    <div class="nav-dropdown" id="logoDropdown">
+      <button class="dd-item" onclick="showPage('home');closeAllDD()"><span class="ddi"></span>Live Now <span class="dd-count">24</span></button>
+      <button class="dd-item" onclick="closeAllDD()"><span class="ddi"></span>Past Streams</button>
+      <button class="dd-item" onclick="closeAllDD()"><span class="ddi"></span>Videos</button>
+      <div class="dd-sep"></div>
+      <button class="dd-item" onclick="openSettings();closeAllDD()"><span class="ddi"></span>Settings</button>
+      <button class="dd-item" onclick="openFaq();closeAllDD()"><span class="ddi"></span>FAQ & Help</button>
+    </div>
+  </div>
+
+  <!-- Search (grows to fill space) -->
+  <div class="search-wrap">
+    <span class="search-icon"></span>
+    <input class="search-input" type="text" placeholder="Search streams, npubs, posts, videos..." oninput="handleSearch(this)">
+    <div class="search-results" id="searchResults">
+      <span class="sr-label">Live Streams</span>
+      <div class="sr-item" onclick="showVideoPage()"><div class="sr-av"></div><div><div class="sr-title">Indie Jazz Live Set</div><div class="sr-sub">wavesound</div></div><span class="sr-live">LIVE</span></div>
+      <div class="sr-item"><div class="sr-av"></div><div><div class="sr-title">Building P2P Relay in Rust</div><div class="sr-sub">fiatjaf</div></div><span class="sr-live">LIVE</span></div>
+      <div class="dd-sep"></div>
+      <span class="sr-label">Profiles</span>
+      <div class="sr-item" onclick="showProfile('fiatjaf','','npub1zl3...gz4','fiatjaf@nostr.com');document.getElementById('searchResults').classList.remove('open')"><div class="sr-av"></div><div><div class="sr-title">fiatjaf</div><div class="sr-sub">fiatjaf@nostr.com</div></div></div>
+      <div class="sr-item" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca');document.getElementById('searchResults').classList.remove('open')"><div class="sr-av"></div><div><div class="sr-title">wavesound</div><div class="sr-sub">wave@bitcoin-cats.ca</div></div></div>
+      <div class="dd-sep"></div>
+      <span class="sr-label">Text Posts</span>
+      <div class="sr-item"><div class="sr-av rect" style="background:var(--surface3)"></div><div><div class="sr-title">"just set up my own RTMP server..."</div><div class="sr-sub">nostrdev - 2h ago</div></div></div>
+    </div>
+  </div>
+
+  <!-- Go Live / Live button -->
+  <button class="btn btn-ghost" id="goLiveBtn" onclick="openGoLive()">Go Live</button>
+  <button class="btn btn-live-pulse" id="myLiveBtn" style="display:none" onclick="goToMyStream()">Live</button>
+
+  <!-- Spacer pushes profile pill to far right -->
+  <div class="nav-spacer"></div>
+
+  <!-- Logged OUT -->
+  <div class="nav-logged-out" id="navLoggedOut">
+    <button class="btn btn-primary" onclick="openLogin()">Login with Nostr</button>
+  </div>
+
+  <!-- Logged IN - profile pill pinned to far right -->
+  <div class="nav-logged-in" id="navLoggedIn">
+    <div class="nav-profile">
+      <div class="nav-user-pill" id="navUserPill">
+        <div class="nav-avatar" id="navAvatar"></div>
+        <div class="nav-display-name" id="navDisplayName">wavesound</div>
+        <span class="nip05-badge" id="navNip05Badge" style="display:none"></span>
+      </div>
+      <div class="nav-dropdown" id="profileDropdown">
+        <div class="pd-header">
+          <div class="pd-av-lg" id="pdAvLg"></div>
+          <div>
+            <div class="pd-name" id="pdName">wavesound <span class="nip05-badge" id="pdBadge" style="display:none"></span></div>
+            <div class="pd-sub" id="pdSub" style="color:var(--nip05)">wave@bitcoin-cats.ca</div>
+          </div>
+        </div>
+        <button class="pd-item" onclick="openMyProfile();closeAllDD()">My Profile</button>
+        <button class="pd-item" onclick="closeAllDD()">My Streams</button>
+        <div class="dd-sep"></div>
+        <button class="pd-item pd-signout" onclick="signOut();closeAllDD()">Sign Out</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ========= GO LIVE MODAL ========= -->
+<div class="modal-ov" id="goLiveModal">
+  <div class="modal">
+    <div id="mForm">
+      <div class="mhd"><div class="mtitle"><span class="mi"></span>Publish Your Stream</div><button class="mclose" onclick="closeGoLive()">x</button></div>
+      <div class="msub">Broadcasts a <span style="color:var(--purple);font-family:'DM Mono',monospace">kind:30311</span> NIP-53 event to your relays.</div>
+      <div class="mbody">
+        <div class="fg-grid">
+          <div class="fg"><label>Stream ID (d-tag)</label><input id="goLiveDTag" type="text" value="my-stream-001"></div>
+          <div class="fg"><label>Title</label><input id="goLiveTitle" type="text" value="Late Night Nostr Build Session"></div>
+          <div class="fg full"><label>Summary</label><textarea id="goLiveSummary">Building a Nostr client from scratch - open Q&amp;A, come hang out!</textarea></div>
+          <div class="fg full"><label>Streaming URL (HLS .m3u8 or RTMP)</label><input id="goLiveStreamUrl" type="text" placeholder="https://your-server.com/live/stream.m3u8"></div>
+          <div class="fg full"><label>Thumbnail Image URL</label><input id="goLiveThumb" type="text" placeholder="https://your-server.com/thumb.jpg"></div>
+          <div class="fg"><label>Starts (UTC)</label><input id="goLiveStarts" type="datetime-local" value="2026-02-27T20:00"></div>
+          <div class="fg"><label>Status</label><div class="srow"><button class="sc sl">Live</button><button class="sc">Planned</button><button class="sc">Ended</button></div></div>
+        </div>
+        <div class="relay-bar" id="relayBar">Broadcasting to 4 relays: damus.io - nos.lol - snort.social - nostr.wine</div>
+      </div>
+      <div class="mfooter">
+        <button class="btn btn-ghost" onclick="closeGoLive()">Cancel</button>
+        <button class="btn btn-ghost">{ } Preview JSON</button>
+        <button class="btn btn-live-pulse" onclick="publishStream()">Go Live Now</button>
+      </div>
+    </div>
+    <div class="msuccess" id="mSuccess">
+      <div class="succ-icon"></div>
+      <div class="succ-title">You're Live on Nostr!</div>
+      <div class="succ-text">Your NIP-53 event has been broadcast to 4 relays.</div>
+      <div style="margin-top:1rem;display:flex;gap:.5rem;justify-content:center;">
+        <button class="btn btn-primary" onclick="goToMyStream();closeGoLive()">View My Stream</button>
+        <button class="btn btn-ghost" onclick="closeGoLive()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= END STREAM CONFIRM ========= -->
+<div class="modal-ov" id="endModal">
+  <div class="end-confirm-modal">
+    <div style="font-size:2rem;margin-bottom:.6rem"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;margin-bottom:.4rem;">End Stream</div>
+    <div style="font-size:.82rem;color:var(--text2);margin-bottom:1.2rem;line-height:1.5;">This will publish a <span style="font-family:'DM Mono',monospace;color:var(--purple)">kind:30311</span> ended event to your relays.</div>
+    <div style="display:flex;gap:.55rem;justify-content:center;">
+      <button class="btn" style="background:var(--live);color:#fff;" onclick="confirmEndStream()">End Stream</button>
+      <button class="btn btn-ghost" onclick="closeEnd()">Keep Going</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========= LOGIN MODAL ========= -->
+<div class="modal-ov" id="loginModal">
+  <div class="login-modal">
+    <button class="lm-close" onclick="closeLogin()">x</button>
+    <div class="lm-hd">
+      <div class="lm-logo"><span class="lm-lb"></span>NostrFlux</div>
+      <div class="lm-sub">Sign in with your Nostr identity - you own your keys.</div>
+    </div>
+    <div class="lm-body">
+      <div class="lm-sec">Recommended</div>
+      <div class="lo" onclick="loginDemo('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')">
+        <div class="lo-ico ext"></div>
+        <div><div class="lo-t">Signer App or Extension</div><div class="lo-d">Alby, nos2x, Amber (Android), any NIP-07 extension.</div></div>
+        <div class="lo-arr"></div>
+      </div>
+      <div class="lo" onclick="loginDemo('hardwareuser','','npub1hw1...abc','')">
+        <div class="lo-ico hw"></div>
+        <div><div class="lo-t">Hardware Signer</div><div class="lo-d">Coldcard, Keystone, or any NIP-46 bunker device.</div></div>
+        <div class="lo-arr"></div>
+      </div>
+      <div class="lm-div"><span>or enter keys manually</span></div>
+      <div class="key-wrap">
+        <input class="key-inp" type="password" placeholder="nsec1... (stored locally only)">
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="loginDemo('keyuser','','npub1key...xyz','')">Sign In with nsec key</button>
+      </div>
+      <div class="lm-warn">Entering your private key is less secure. NostrFlux never sends your key to any server.</div>
+      <div class="lm-div"><span>or</span></div>
+      <div class="lo" onclick="loginDemo('newnostr',','npub1new...key','')" style="border-color:rgba(0,212,138,.2);">
+        <div class="lo-ico new"></div>
+        <div><div class="lo-t">Create New Identity</div><div class="lo-d">Generate a fresh keypair. No email, no phone - just cryptography.</div></div>
+        <div class="lo-arr"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= ONBOARDING MODAL ========= -->
+<div class="modal-ov" id="onboardingModal">
+  <div class="settings-modal onboard-modal">
+    <button class="mclose" style="position:absolute;top:1rem;right:1rem;" onclick="closeOnboarding()">x</button>
+    <div class="sm-hd"><div class="sm-title">Create Your Nostr Profile</div></div>
+    <div class="sm-body">
+      <div class="onboard-secret-block">
+        <div class="onboard-secret-label">Your private key (nsec)</div>
+        <div class="onboard-secret-row">
+          <code id="onbNsecValue">nsec1...</code>
+          <button class="btn btn-ghost" style="padding:.32rem .6rem;" onclick="copyOnboardingNsec()" id="onbCopyBtn">Copy</button>
+        </div>
+        <div class="onboard-secret-warn">Save this now. Anyone with this key controls your account.</div>
+      </div>
+
+      <div class="onboard-grid">
+        <div class="fg"><label>Display Name</label><input id="onbDisplayName" type="text" placeholder="SatsStreamer"></div>
+        <div class="fg"><label>Avatar Emoji/URL</label><input id="onbAvatar" type="text" placeholder=" or https://.../avatar.jpg"></div>
+        <div class="fg full"><label>Banner URL</label><input id="onbBanner" type="text" placeholder="https://.../banner.jpg"></div>
+        <div class="fg full"><label>Bio</label><textarea id="onbBio" placeholder="Tell people what you stream and build..."></textarea></div>
+        <div class="fg"><label>Website</label><input id="onbWebsite" type="text" placeholder="https://your-site.com"></div>
+        <div class="fg"><label>Lightning Address (lud16)</label><input id="onbLud16" type="text" placeholder="you@getalby.com"></div>
+      </div>
+
+      <div class="sm-save-row" style="margin-top:1rem;justify-content:flex-end;display:flex;gap:.5rem;">
+        <button class="btn btn-ghost" onclick="skipOnboarding()">Skip For Now</button>
+        <button class="btn btn-primary" onclick="completeOnboarding()">Save & Enter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= SETTINGS MODAL ========= -->
+<div class="modal-ov" id="settingsModal">
+  <div class="settings-modal">
+    <button class="mclose" style="position:absolute;top:1rem;right:1rem;" onclick="closeSettings()">x</button>
+    <div class="sm-hd"><div class="sm-title">Settings</div></div>
+    <div class="sm-body">
+      <div class="sm-section">
+        <div class="sm-sec-title">Relays</div>
+        <div id="settingsRelayList"></div>
+        <div class="relay-add-row">
+          <input type="text" id="settingsRelayInput" placeholder="wss://your-relay.com">
+          <button class="btn btn-ghost" style="padding:.4rem .85rem;" onclick="addRelayFromSettings()">Add</button>
+        </div>
+      </div>
+
+      <div class="sm-section">
+        <div class="sm-sec-title">Streaming</div>
+        <div class="sm-row"><div><div class="sm-row-label">Auto-publish NIP-53 event</div><div class="sm-row-desc">Broadcast stream info when you go live</div></div><div class="toggle setting-toggle on" id="setAutoPublishToggle" onclick="toggleSetting(this)"></div></div>
+        <div class="sm-row"><div><div class="sm-row-label">Mini player on navigation</div><div class="sm-row-desc">Show floating player when browsing away</div></div><div class="toggle setting-toggle on" id="setMiniPlayerToggle" onclick="toggleSetting(this)"></div></div>
+      </div>
+
+      <div class="sm-section">
+        <div class="sm-sec-title">Zaps (NIP-57)</div>
+        <div class="sm-row"><div><div class="sm-row-label">Lightning Address (lud16)</div></div></div>
+        <input id="settingsLud16Input" type="text" placeholder="you@getalby.com" style="margin-top:.4rem;">
+        <div class="sm-row" style="margin-top:.4rem;"><div><div class="sm-row-label">Show zap notifications in chat</div></div><div class="toggle setting-toggle on" id="setZapNoticeToggle" onclick="toggleSetting(this)"></div></div>
+      </div>
+
+      <div class="sm-section">
+        <div class="sm-sec-title">Profile Defaults</div>
+        <div class="sm-row"><div><div class="sm-row-label">Website</div></div></div>
+        <input id="settingsWebsiteInput" type="text" placeholder="https://your-site.com" style="margin-top:.4rem;">
+        <div class="sm-row" style="margin-top:.4rem;"><div><div class="sm-row-label">Banner URL</div></div></div>
+        <input id="settingsBannerInput" type="text" placeholder="https://your-site.com/banner.jpg" style="margin-top:.4rem;">
+      </div>
+
+      <div class="sm-section">
+        <div class="sm-sec-title">Interface</div>
+        <div class="sm-row"><div><div class="sm-row-label">Show NIP-05 badges in chat</div></div><div class="toggle setting-toggle on" id="setNip05Toggle" onclick="toggleSetting(this)"></div></div>
+        <div class="sm-row"><div><div class="sm-row-label">Compact chat mode</div></div><div class="toggle setting-toggle" id="setCompactToggle" onclick="toggleSetting(this)"></div></div>
+        <div class="sm-row"><div><div class="sm-row-label">Animate zap notifications</div></div><div class="toggle setting-toggle on" id="setAnimateToggle" onclick="toggleSetting(this)"></div></div>
+      </div>
+
+      <div class="sm-save-row">
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= FAQ MODAL ========= -->
+<div class="modal-ov" id="faqModal">
+  <div class="settings-modal">
+    <button class="mclose" style="position:absolute;top:1rem;right:1rem;" onclick="closeFaq()">x</button>
+    <div class="sm-hd"><div class="sm-title">FAQ & Help</div></div>
+    <div class="sm-body">
+      <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What is NIP-53 <span class="faq-chevron">+</span></div><div class="faq-a">NIP-53 defines live streaming events on Nostr using <code style="font-family:'DM Mono',monospace;color:var(--purple)">kind:30311</code>. Fill in the Go Live form and NostrFlux broadcasts your stream to relays - any NIP-53 compatible client can discover it.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">How do I self-host my stream <span class="faq-chevron">+</span></div><div class="faq-a">Install nginx-rtmp on any VPS ($5/mo). Point OBS to your RTMP endpoint. NostrFlux publishes the HLS URL to Nostr relays. No third-party CDN needed.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">What is NIP-05 verification <span class="faq-chevron">+</span></div><div class="faq-a">NIP-05 links your npub to a domain (e.g. craig@bitcoin-cats.ca). You host a JSON file at your domain. Verified users get a purple badge in chat and on profiles.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">How do Zaps work (NIP-57) <span class="faq-chevron">+</span></div><div class="faq-a">Add your Lightning address (lud16) to your NIP-01 profile. Viewers click Zap, their wallet pays a Lightning invoice, and the proof is published as a <code style="font-family:'DM Mono',monospace;color:var(--purple)">kind:9735</code> event in chat.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Which NIPs does NostrFlux support <span class="faq-chevron">+</span></div><div class="faq-a">NIP-01 (profiles), NIP-05 (verification), NIP-07 (browser signing), NIP-25 (reactions/likes), NIP-46 (remote signing), NIP-53 (live streams), NIP-57 (zaps), NIP-65 (relay lists).</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= HOME PAGE ========= -->
+<div class="page active" id="homePage">
+  <div class="hero-stream" onclick="showVideoPage()">
+    <div class="hero-bg"></div>
+    <div class="hero-grid-ov"></div>
+    <div class="hero-player">
+      <div class="stream-visual" style="background:linear-gradient(135deg,#0d1e30,#1a0a00,#080d18)"></div>
+      <div class="play-ov"><div class="play-btn-big"></div></div>
+    </div>
+    <div class="hero-info">
+      <div class="hero-live-badge"><span class="live-dot"></span>LIVE</div>
+      <div class="hero-title">Indie Jazz Live - No Platform, No Rules</div>
+      <div class="hero-host">
+        <div class="hero-av"></div>
+        <span style="font-weight:600;color:var(--text)">wavesound</span>
+        <span class="nip05-badge" title="NIP-05: wave@bitcoin-cats.ca"></span>
+      </div>
+      <div class="hero-summary">Live jazz set from my home studio. No YouTube, no Spotify - pure music on Nostr.</div>
+      <div class="hero-stats">
+        <div class="h-stat"><div class="val">2,105</div><div class="lbl">watching</div></div>
+        <div class="h-stat zap"><div class="val">88,800</div><div class="lbl">sats</div></div>
+        <div class="h-stat"><div class="val">1h 24m</div><div class="lbl">live</div></div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="event.stopPropagation();showVideoPage()">Watch</button>
+        <button class="btn btn-zap" onclick="event.stopPropagation()">Zap</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cat-strip">
+    <button class="cat-chip active">All Live</button>
+    <button class="cat-chip">Gaming</button>
+    <button class="cat-chip">Bitcoin</button>
+    <button class="cat-chip">Coding</button>
+    <button class="cat-chip">Music</button>
+    <button class="cat-chip">Talk</button>
+    <button class="cat-chip">Education</button>
+    <button class="cat-chip">Art</button>
+    <button class="cat-chip">Fitness</button>
+    <button class="cat-chip">IRL</button>
+  </div>
+
+  <div class="home-layout">
+    <div class="left-sidebar">
+      <div class="sb-sec">
+        <span class="sb-label">Following Live</span><div id="followingLiveList">
+        <div class="sb-link sb-live" onclick="showVideoPage()"><span class="live-ind"></span><div class="sb-av"></div><span>wavesound</span></div>
+        <div class="sb-link sb-live"><span class="live-ind"></span><div class="sb-av"></div><span>fiatjaf</span></div>
+        <div class="sb-link sb-live"><span class="live-ind"></span><div class="sb-av"></div><span>jack</span></div></div>
+      </div>
+      <div class="sb-sec">
+        <span class="sb-label">Recommended</span>
+        <div class="sb-link"><div class="sb-av"></div><span>nostrdev</span></div>
+        <div class="sb-link"><div class="sb-av"></div><span>stacksats</span></div>
+        <div class="sb-link"><div class="sb-av"></div><span>satsoshi99</span></div>
+        <div class="sb-link" style="color:var(--muted);font-size:.74rem;margin-top:.1rem;">Browse all</div>
+      </div>
+    </div>
+    <div class="stream-main">
+      <div class="sec-hd"><h2>Live Now</h2><span class="see-all">See all (24)</span></div>
+      <div class="grid-4" id="liveGrid"><div class="stream-card" onclick="showVideoPage()"><div class="ct"><div class="ct-inner"><div class="tc t1"></div></div><div class="cb-live"><span class="live-dot"></span>LIVE</div><div class="cb-viewers">2.1k</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Indie Jazz Live - No Platform No Rules</div><div class="ci-host">wavesound <span class="nip05-badge" style="font-size:.65rem"></span></div><div class="ci-tags"><span class="tag">Music</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t2"></div></div><div class="cb-live"><span class="live-dot"></span>LIVE</div><div class="cb-viewers">1.2k</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Building P2P Relay in Rust Ep. 12</div><div class="ci-host">fiatjaf <span class="nip05-badge" style="font-size:.65rem"></span></div><div class="ci-tags"><span class="tag">Coding</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t3"></div></div><div class="cb-live"><span class="live-dot"></span>LIVE</div><div class="cb-viewers">892</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Bitcoin AMA - Lightning Deep Dive</div><div class="ci-host">jack</div><div class="ci-tags"><span class="tag">Bitcoin</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t4"></div></div><div class="cb-live" style="background:var(--purple)">SOON</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Sovereign Tech Talk Podcast Ep. 44</div><div class="ci-host">stacksats - Starts 8PM UTC</div><div class="ci-tags"><span class="tag">Podcast</span></div></div></div></div></div>
+      </div>
+      <div class="sec-hd"><h2>Popular This Week</h2><span class="see-all">See all</span></div>
+      <div class="grid-4">
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t5"></div></div><div class="cb-viewers">4.2k VOD</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Marathon Gaming - Permadeath Run</div><div class="ci-host">bitcoingamer</div><div class="ci-tags"><span class="tag">Gaming</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t6"></div></div><div class="cb-viewers">1.8k VOD</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Digital Art - Bitcoin Landscapes #3</div><div class="ci-host">pixelsat <span class="nip05-badge" style="font-size:.65rem"></span></div><div class="ci-tags"><span class="tag">Art</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t7"></div></div><div class="cb-viewers">3.1k VOD</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Self-Hosting 101 - Your Own Server</div><div class="ci-host">sovereignstack</div><div class="ci-tags"><span class="tag">Tutorial</span></div></div></div></div></div>
+        <div class="stream-card"><div class="ct"><div class="ct-inner"><div class="tc t8"></div></div><div class="cb-viewers">920 VOD</div></div><div class="ci"><div class="ci-row"><div class="ci-av"></div><div><div class="ci-title">Open Mic Night - Uncensored Comedy</div><div class="ci-host">relay.run</div><div class="ci-tags"><span class="tag">Comedy</span></div></div></div></div></div>
+      </div>
+    </div>
+  </div>
+  <footer>
+    <div class="flogo"><span style="color:var(--zap)"></span>NostrFlux</div>
+    <p>Open source - Censorship resistant - <a href="#" style="color:var(--accent);text-decoration:none">GitHub</a></p>
+    <div class="nostr-pill">NIP-53 // kind:30311</div>
+  </footer>
+</div>
+
+<!-- ========= VIDEO PAGE ========= -->
+<div id="videoPage">
+  <div class="video-layout">
+    <div class="video-col">
+      <!-- Player -->
+      <div class="player-wrap">
+        <div class="player-bg"></div>
+        <div class="player-ui">
+          <div class="pctrl-row">
+            <button class="pc"></button>
+            <button class="pc" style="font-size:.85rem"></button>
+            <div class="pvol"><div class="pvol-f"></div></div>
+            <div class="spacer"></div>
+            <button class="end-stream-btn visible" id="endStreamBtn" onclick="openEnd()">End Stream</button>
+            <div class="p-live" style="margin-left:.5rem"><span class="live-dot"></span>LIVE</div>
+            <button class="pc" style="font-size:.85rem;margin-left:.5rem"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stream info -->
+      <div class="sib">
+        <!-- Editable title row -->
+        <div class="editable-row">
+          <div class="sib-title">Indie Jazz Live Set - No Platform, No Rules</div>
+          <!-- Pencil shows only for stream owner -->
+          <button class="edit-pencil owner-only visible" title="Edit title"></button>
+        </div>
+
+        <!-- Host row -->
+        <div class="sib-host-row">
+          <div class="sib-av" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')"></div>
+          <div class="sib-host-info">
+            <div class="sib-name">wavesound
+              <span class="nip05-badge" title="NIP-05 Verified: wave@bitcoin-cats.ca"></span>
+            </div>
+            <!-- NIP-05 shown; npub hidden because they have NIP-05 -->
+            <div class="sib-identity nip05-text">wave@bitcoin-cats.ca</div>
+          </div>
+          <!-- Actions: Zap, Follow, Share, Like, Report -->
+          <div class="sib-actions-row">
+            <button class="btn btn-zap" style="padding:.36rem .8rem;font-size:.79rem;">Zap</button>
+            <button class="btn btn-follow" style="padding:.36rem .8rem;font-size:.79rem;">+ Follow</button>
+            <button class="action-btn share-btn">Share</button>
+            <button class="action-btn like-btn" id="likeBtn" onclick="toggleLike()"> <span id="likeCount">842</span></button>
+            <button class="action-btn report-btn" title="Report stream"></button>
+          </div>
+        </div>
+
+        <!-- Stats row - followers included here now -->
+        <div class="sib-stats-row">
+          <div class="ss fol"><span class="n">12.4k</span> <span class="l">followers</span></div>
+          <div class="ss lv"><span class="n">2,105</span> <span class="l">watching</span></div>
+          <div class="ss zap"><span class="n">88,800</span> <span class="l">sats</span></div>
+          <div class="ss"><span class="n">1h 24m</span> <span class="l">live</span></div>
+          <div class="ss"><span class="n">4</span> <span class="l">relays</span></div>
+        </div>
+
+        <!-- Editable summary -->
+        <div class="editable-block" style="margin-top:.5rem">
+          <div class="sib-summary">Live jazz set from my home studio. Self-hosted on a $5 VPS - no middlemen, no censorship.</div>
+          <button class="block-pencil owner-only visible" title="Edit description"></button>
+        </div>
+      </div>
+
+      <!-- Recommended -->
+      <div class="reco">
+        <div class="reco-title">Also Live Now</div>
+        <div class="reco-item"><div class="reco-thumb"><div class="tc t2" style="height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;"></div></div><div class="reco-text"><div class="rt">Building P2P Relay in Rust</div><div class="rs">fiatjaf - <span style="color:var(--live)">1.2k live</span></div></div></div>
+        <div class="reco-item"><div class="reco-thumb"><div class="tc t3" style="height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;"></div></div><div class="reco-text"><div class="rt">Bitcoin AMA - Lightning Deep Dive</div><div class="rs">jack - <span style="color:var(--live)">892 live</span></div></div></div>
+        <div class="reco-item"><div class="reco-thumb"><div class="tc t4" style="height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;"></div></div><div class="reco-text"><div class="rt">Sovereign Tech Talk Podcast Ep.44</div><div class="rs">stacksats - <span style="color:var(--purple)">Soon</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- Chat sidebar -->
+    <div class="stream-sidebar">
+      <div class="stabs">
+        <div class="stab active" onclick="switchTab('chat')">Live Chat</div>
+        <div class="stab" onclick="switchTab('viewers')">Viewers <span style="font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted)">2.1k</span></div>
+      </div>
+      <div class="chat-scroll" id="chatScroll">
+        <div class="cmsg"><div class="c-av" onclick="showProfile('fiatjaf','','npub1zl3...gz4','fiatjaf@nostr.com')"></div><div class="c-body"><div class="c-name-row"><span class="c-name co" onclick="showProfile('fiatjaf','','npub1zl3...gz4','fiatjaf@nostr.com')">fiatjaf</span><span class="c-nip05" title="fiatjaf@nostr.com"></span></div><div class="c-text">incredible session wavesound </div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name cp">satsoshi99</span></div><div class="c-text">this is why we build on nostr</div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg zap-ev"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name cz">ZAP - 1,000 sats</span></div><div class="c-text">beautiful chord at 42:10!</div></div></div>
+        <div class="cmsg"><div class="c-av" onclick="showProfile('relayrunner','','npub1ghi...rst','relay@nostr.run')"></div><div class="c-body"><div class="c-name-row"><span class="c-name cg" onclick="showProfile('relayrunner','','npub1ghi...rst','relay@nostr.run')">relayrunner</span><span class="c-nip05" title="relay@nostr.run"></span></div><div class="c-text">what's your RTMP setup</div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg"><div class="c-av" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')"></div><div class="c-body"><div class="c-name-row"><span class="c-name co" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')">wavesound</span><span class="c-nip05" title="wave@bitcoin-cats.ca"></span></div><div class="c-text">nginx-rtmp on a $5 Hetzner VPS!</div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name">nostrdev</span></div><div class="c-text">NIP-53 is so underrated</div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg zap-ev"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name cz">ZAP - 21,000 sats</span></div><div class="c-text">WAGMI no platforms </div></div></div>
+        <div class="cmsg"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name cp">bitlover</span></div><div class="c-text">streaming from your own server is based</div></div><div class="chat-msg-actions"><button class="cma-btn" title="Reply"></button><button class="cma-btn like-cma" title="Like"></button><button class="cma-btn zap-cma" title="Zap"></button><button class="cma-btn" title="Share"></button></div></div>
+        <div class="cmsg zap-ev"><div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name cz">ZAP - 5,000 sats</span></div><div class="c-text">encore!</div></div></div>
+      </div>
+      <div class="viewers-panel" id="viewersPanel">
+        <div style="font-size:.71rem;color:var(--muted);font-family:'DM Mono',monospace;padding:.18rem .38rem;">2,105 watching</div>
+        <div class="vr" onclick="showProfile('fiatjaf','','npub1zl3...gz4','fiatjaf@nostr.com')"><div class="v-av"></div><div><div class="v-name">fiatjaf <span class="c-nip05"></span></div><div class="v-npub">fiatjaf@nostr.com</div></div><span class="v-badge vb-z">top</span></div>
+        <div class="vr"><div class="v-av"></div><div><div class="v-name">satsoshi99</div><div class="v-npub">npub1def...uvw</div></div></div>
+        <div class="vr" onclick="showProfile('relayrunner','','npub1ghi...rst','relay@nostr.run')"><div class="v-av"></div><div><div class="v-name">relayrunner <span class="c-nip05"></span></div><div class="v-npub">relay@nostr.run</div></div></div>
+        <div class="vr"><div class="v-av"></div><div><div class="v-name">nostrdev</div><div class="v-npub">npub1jkl...opq</div></div><span class="v-badge vb-l">live</span></div>
+      </div>
+      <div class="chat-bottom">
+        <div class="chat-iw">
+          <textarea class="chat-inp" placeholder="Send a message..." rows="2"></textarea>
+        </div>
+        <div class="chat-acts">
+          <button class="ca-btn zap-ca">Zap</button>
+          <button class="ca-btn" id="emojiBtn" onclick="toggleEmoji(event)">Emoji</button>
+          <button class="ca-btn" onclick="openSettings()">Settings</button>
+          <button class="chat-send-btn">Send</button>
+          <div class="emoji-picker" id="emojiPicker"><div class="ep-grid" id="epGrid"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========= PROFILE PAGE ========= -->
+<div id="profilePage">
+  <div class="profile-hero">
+    <img id="profBannerImg" class="profile-banner-img" alt="Profile banner" src="">
+  </div>
+  <div class="profile-content">
+    <div class="profile-top">
+      <div class="profile-left-stack">
+        <div class="profile-head-row">
+          <div class="profile-av-wrap"><div class="profile-av-big" id="profAv">U</div></div>
+          <div class="profile-identity-box" id="profileIdentityBox">
+            <div class="profile-name-row">
+              <div class="profile-name" id="profName">Profile</div>
+              <span class="nip05-badge" style="font-size:.95rem;display:none" id="profNip05Check">&#10003;</span>
+            </div>
+            <div class="profile-nip05" id="profNip05" style="display:none">NIP-05: not set</div>
+            <div class="profile-npub" id="profNpub">npub</div>
+          </div>
+        </div>
+
+        <div class="profile-bio-box">
+          <div class="profile-bio clamped" id="profBio">No bio yet.</div>
+          <button class="profile-show-more" id="profBioToggle" style="display:none;" onclick="toggleProfileBio()">Show more</button>
+          <div class="profile-bio-links">
+            <div class="profile-bio-meta" id="profWebsiteRow" style="display:none;"><span class="lbl">Website</span><a id="profWebsiteBio" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+            <div class="profile-bio-meta" id="profLud16Row" style="display:none;"><span class="lbl">Lightning</span><span class="val" id="profLud16Bio"></span></div>
+            <div class="profile-bio-meta" id="profTwitterRow" style="display:none;"><span class="lbl">Twitter</span><a id="profTwitterBio" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+            <div class="profile-bio-meta" id="profGithubRow" style="display:none;"><span class="lbl">GitHub</span><a id="profGithubBio" href="#" target="_blank" rel="noopener noreferrer"></a></div>
+          </div>
+          <div class="profile-since" id="profNostrSince">On Nostr for -</div>
+        </div>
+      </div>
+
+      <div class="profile-right-stack">
+        <div class="profile-action-box">
+          <div class="profile-actions-row">
+            <button class="btn btn-ghost" id="profileMessageBtn" onclick="openProfileMessage()">Message</button>
+            <button class="btn btn-zap">Zap</button>
+            <button class="btn btn-follow" id="profileFollowBtn" onclick="toggleFollowProfile()">+ Follow</button>
+            <button class="btn btn-ghost" id="profileAddToListBtn" onclick="addProfileToList()">Add to List</button>
+            <button class="btn btn-ghost" id="profileShareBtn" onclick="shareProfile()">Share</button>
+            <button class="action-btn report-btn" title="Report">Report</button>
+          </div>
+        </div>
+
+        <div class="profile-inline-meta">
+          <div class="profile-inline-stats">
+            <div class="pis"><div class="iv" id="profFollowers">0</div><div class="il">Followers</div></div>
+            <div class="pis"><div class="iv" id="profFollowing">0</div><div class="il">Following</div></div>
+            <div class="pis"><div class="iv" id="profStreams">0</div><div class="il">Streams</div></div>
+            <div class="pis"><div class="iv" id="profSats">SATS 0</div><div class="il">Sats Received</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-main-grid">
+      <div class="profile-col">
+        <div class="profile-card" id="profileLiveWrap" style="display:none;">
+          <div class="profile-sec-head">
+            <h3>Live Now</h3>
+            <span id="profLiveStatus">offline</span>
+          </div>
+          <div class="profile-live-player" id="profileLivePlayer">No live stream right now.</div>
+          <div class="profile-live-foot">
+            <button class="btn btn-primary" style="font-size:.78rem;padding:.38rem .72rem;" onclick="openStreamFromProfile()">Open in Theater</button>
+          </div>
+        </div>
+
+        <div class="profile-card" id="profilePostsLeft">
+          <div class="profile-sec-head">
+            <h3>Posts</h3>
+            <span id="profileFeedCount">0 notes</span>
+          </div>
+          <div id="profileFeedList" class="profile-feed-list">
+            <div class="profile-feed-empty">Loading notes from relays...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-side">
+        <div class="profile-card profile-media-card">
+          <div class="profile-tab-row">
+            <button class="profile-tab" id="profileTabBtnPosts" onclick="switchProfileTab('posts')" style="display:none;">Posts</button>
+            <button class="profile-tab active" id="profileTabBtnStreams" onclick="switchProfileTab('streams')">Past Streams</button>
+            <button class="profile-tab" id="profileTabBtnVideos" onclick="switchProfileTab('videos')">Videos</button>
+            <button class="profile-tab" id="profileTabBtnPhotos" onclick="switchProfileTab('photos')">Photos</button>
+          </div>
+
+          <div class="profile-tab-pane" id="profileTabPosts">
+            <div id="profileFeedListSide" class="profile-feed-list">
+              <div class="profile-feed-empty">Loading notes from relays...</div>
+            </div>
+          </div>
+          <div class="profile-tab-pane on" id="profileTabStreams">
+            <div id="profilePastStreamsList" class="profile-media-list">
+              <div class="profile-feed-empty">Loading stream history...</div>
+            </div>
+          </div>
+          <div class="profile-tab-pane" id="profileTabVideos">
+            <div id="profileVideosList" class="profile-video-grid">
+              <div class="profile-feed-empty">Loading videos...</div>
+            </div>
+          </div>
+          <div class="profile-tab-pane" id="profileTabPhotos">
+            <div id="profilePhotosList" class="profile-photo-grid">
+              <div class="profile-feed-empty">Loading photos...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:.65rem 1.5rem;border-top:1px solid var(--border);">
+    <button class="btn btn-ghost" onclick="goBackFromProfile()" style="font-size:.79rem;">Back</button>
+  </div>
+</div>
+
+<!-- ========= SCRIPTS ========= -->
+<script src="./nostrflux-app.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
