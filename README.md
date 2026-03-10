@@ -203,11 +203,170 @@ Users can join topic-based communities such as:
 - Music
 - Coding
 
-Inside groups users can:
+## Groups (Discord-Style Communities on Nostr)
 
-- Post
-- Chat
-- Stream
+Groups will function similarly to **Discord servers**, but built using the **Nostr protocol**.
+
+Each group acts as a community hub where users can communicate, share posts, and watch streams together.
+
+### Group Structure
+
+Each group contains:
+
+- Group name
+- Group description
+- Group icon
+- Group banner
+- Group owner
+- Moderators
+- Members
+
+Example:
+
+Bitcoin Builders
+```
+Owner: pubkey
+Members: 1,243
+Description: Community for Bitcoin developers
+```
+
+---
+
+### Channels
+
+Each group can contain multiple channels, similar to Discord.
+
+Channel types:
+
+**Text Channels**
+
+Examples:
+
+```
+#general
+#announcements
+#nostr-dev
+#memes
+```
+
+Features:
+- Post messages
+- Reply to threads
+- Share media
+- Zap messages
+
+---
+
+**Live Stream Channels**
+
+Channels where members can stream live.
+
+Example:
+
+```
+🔴 live-streams
+```
+
+Features:
+
+- Host live streams
+- Chat during stream
+- Send zaps to streamers
+
+---
+
+### Permissions
+
+Groups support role-based permissions.
+
+Roles may include:
+
+- Owner
+- Admin
+- Moderator
+- Member
+
+Permissions may include:
+
+- Create channels
+- Delete posts
+- Moderate chat
+- Start streams
+- Invite users
+
+---
+
+### Joining Groups
+
+Users can join groups through:
+
+- Invite link
+- Public discovery
+- Friend invites
+
+Example invite link:
+
+```
+nostrflux.com/group/bitcoin-builders
+```
+
+---
+
+### Group Discovery
+
+A **Groups Directory** page allows users to discover communities.
+
+Categories may include:
+
+- Bitcoin
+- Gaming
+- Development
+- Music
+- Politics
+- Art
+
+Each group card displays:
+
+- Group icon
+- Member count
+- Short description
+
+---
+
+### Notifications
+
+Members receive notifications when:
+
+- Someone posts in a group
+- A group stream goes live
+- They are mentioned
+
+---
+
+### Nostr Integration
+
+Groups are built using Nostr events.
+
+Possible implementation:
+
+- Group metadata stored as Nostr events
+- Messages published as Nostr notes
+- Channel IDs referenced through tags
+- Streams announced via live event kinds
+
+This allows groups to remain **decentralized and relay-compatible**.
+
+---
+
+### Future Improvements
+
+- Threaded conversations
+- Voice channels
+- Group moderation tools
+- Group-specific feeds
+- Pinned messages
+- Scheduled streams
+
 
 ---
 
