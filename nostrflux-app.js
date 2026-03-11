@@ -85,7 +85,9 @@
     liveGridPage: 0,
     liveGridObserver: null,
     GRID_PAGE_SIZE: 20,
-    scriptPromises: {}
+    scriptPromises: {},
+    streamZapTotals: new Map(),
+    _theaterRuntimeInterval: null
   };
 
   class RelayPool {
@@ -1637,23 +1639,30 @@
 
   function renderVideo(stream) {
     const p = profileFor(stream.pubkey);
+
+    // Title & summary
     const title = qs('.sib-title');
     if (title) title.textContent = stream.title;
     const summary = qs('.sib-summary');
     if (summary) summary.textContent = stream.summary || 'Live stream.';
+
+    // Host avatar
     const av = qs('.sib-av');
     if (av) {
       setAvatarEl(av, p.picture || '', pickAvatar(stream.pubkey));
       av.onclick = () => showProfileByPubkey(stream.pubkey);
     }
+
+    // Host name + nip05
     const name = qs('.sib-name');
     if (name) {
-      name.textContent = p.name;
+      name.innerHTML = '';
+      name.textContent = p.name || shortHex(stream.pubkey);
       if (p.nip05) {
         const badge = document.createElement('span');
         badge.className = 'nip05-badge';
-        badge.title = p.nip05;
-        badge.textContent = '\\u2713';
+        badge.title = `NIP-05: ${p.nip05}`;
+        badge.textContent = '\u2713';
         name.appendChild(document.createTextNode(' '));
         name.appendChild(badge);
       }
@@ -1661,16 +1670,69 @@
     const ident = qs('.sib-identity');
     if (ident) ident.textContent = p.nip05 || shortHex(stream.pubkey);
 
-    const statsN = qsa('.sib-stats-row .ss .n');
-    if (statsN[1]) statsN[1].textContent = `${stream.participants || 0}`;
-    if (statsN[4]) statsN[4].textContent = `${state.relays.length}`;
+    // Stats — viewers & relays
+    const viewers = qs('#theaterViewers');
+    if (viewers) viewers.textContent = formatCount(stream.participants || 0);
+    const relays = qs('#theaterRelays');
+    if (relays) relays.textContent = String(state.relays.length);
+
+    // Sats — sum of zaps received on this stream (if tracked), else show '—'
+    const satsEl = qs('#theaterSats');
+    if (satsEl) {
+      const zapTotal = state.streamZapTotals && state.streamZapTotals.get(stream.address);
+      satsEl.textContent = zapTotal != null ? formatCount(zapTotal) : '—';
+    }
+
+    // Followers — fetch from profileStats if already loaded
+    const followersEl = qs('#theaterFollowers');
+    if (followersEl) {
+      const stats = state.profileStatsByPubkey && state.profileStatsByPubkey.get(stream.pubkey);
+      followersEl.textContent = stats ? formatCount(stats.followers || 0) : '—';
+    }
+
+    // Runtime counter — ticks every second from stream.starts
+    clearInterval(state._theaterRuntimeInterval);
+    const runtimeEl = qs('#theaterRuntime');
+    if (runtimeEl) {
+      const updateRuntime = () => {
+        const startTs = stream.starts || stream.created_at;
+        if (!startTs) { runtimeEl.textContent = '—'; return; }
+        const secs = Math.max(0, Math.floor(Date.now() / 1000) - startTs);
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        runtimeEl.textContent = h > 0
+          ? `${h}h ${String(m).padStart(2,'0')}m`
+          : `${m}m ${String(s).padStart(2,'0')}s`;
+      };
+      updateRuntime();
+      state._theaterRuntimeInterval = setInterval(updateRuntime, 1000);
+    }
+
+    // Like button — reset state for new stream
+    const likeBtn = qs('#likeBtn');
+    const likeCount = qs('#likeCount');
+    if (likeBtn) likeBtn.classList.remove('liked');
+    if (likeCount) likeCount.textContent = '0';
+
+    // Follow button — reflect current follow state
+    updateTheaterFollowBtn(stream.pubkey);
 
     renderVideoPlayback(stream);
 
+    // Owner-only controls
     const owner = state.user && state.user.pubkey === stream.pubkey;
     const endBtn = qs('#endStreamBtn');
     if (endBtn) endBtn.classList.toggle('visible', !!owner);
     qsa('.owner-only').forEach((n) => n.classList.toggle('visible', !!owner));
+  }
+
+  function updateTheaterFollowBtn(pubkey) {
+    const btn = qs('#theaterFollowBtn');
+    if (!btn) return;
+    const isFollowing = state.followedPubkeys && state.followedPubkeys.has(pubkey);
+    btn.textContent = isFollowing ? '✓ Following' : '+ Follow';
+    btn.classList.toggle('following-active', !!isFollowing);
   }
 
   function renderSearch(term) {
@@ -2532,6 +2594,12 @@
           });
 
           if (state.selectedProfilePubkey === pubkey) renderProfilePage(pubkey);
+          // Refresh theater stat if this is the open stream's host
+          const openStream = state.selectedStreamAddress && state.streamsByAddress.get(state.selectedStreamAddress);
+          if (openStream && openStream.pubkey === pubkey) {
+            const el = qs('#theaterFollowers');
+            if (el) el.textContent = formatCount(followerSet.size);
+          }
         },
         eose: () => {
           state.profileStatsByPubkey.set(pubkey, {
@@ -2539,6 +2607,11 @@
             following: followingSet.size
           });
           if (state.selectedProfilePubkey === pubkey) renderProfilePage(pubkey);
+          const openStream = state.selectedStreamAddress && state.streamsByAddress.get(state.selectedStreamAddress);
+          if (openStream && openStream.pubkey === pubkey) {
+            const el = qs('#theaterFollowers');
+            if (el) el.textContent = formatCount(followerSet.size);
+          }
         }
       }
     );
@@ -2854,7 +2927,8 @@
       picture: profileData.picture || '',
       banner: profileData.banner || '',
       website: profileData.website || '',
-      lud16: profileData.lud16 || ''
+      lud16: profileData.lud16 || '',
+      nip05: profileData.nip05 || ''
     };
 
     await signAndPublish(KIND_PROFILE, JSON.stringify(payload), []);
@@ -2883,15 +2957,64 @@
     const modal = qs('#onboardingModal');
     if (!modal) return;
 
-    if (qs('#onbNsecValue')) qs('#onbNsecValue').textContent = state.pendingOnboardingNsec || 'nsec1...';
-    if (qs('#onbDisplayName')) qs('#onbDisplayName').value = prefill.name || '';
-    if (qs('#onbAvatar')) qs('#onbAvatar').value = prefill.picture || '';
-    if (qs('#onbBanner')) qs('#onbBanner').value = prefill.banner || state.settings.banner || '';
-    if (qs('#onbBio')) qs('#onbBio').value = prefill.about || '';
-    if (qs('#onbWebsite')) qs('#onbWebsite').value = prefill.website || state.settings.website || '';
-    if (qs('#onbLud16')) qs('#onbLud16').value = prefill.lud16 || state.settings.lud16 || '';
+    // Populate nsec
+    const nsecEl = qs('#onbNsecValue');
+    if (nsecEl) {
+      nsecEl.textContent = state.pendingOnboardingNsec || 'nsec1...';
+      nsecEl.classList.remove('revealed');
+    }
+
+    // Reset reveal/copy buttons
+    const revealBtn = qs('#onbRevealBtn');
+    if (revealBtn) revealBtn.textContent = '👁 Reveal';
+    const copyBtn = qs('#onbCopyBtn');
+    if (copyBtn) { copyBtn.textContent = '📋 Copy'; copyBtn.classList.remove('copied'); }
+
+    // Reset checkbox + continue button
+    const check = qs('#onbSavedCheck');
+    if (check) check.checked = false;
+    const cont = qs('#onbContinueBtn');
+    if (cont) cont.classList.remove('ready');
+
+    // Pre-fill profile fields
+    const set = (id, val) => { const el = qs(id); if (el) el.value = val || ''; };
+    set('#onbDisplayName', prefill.name);
+    set('#onbAvatar', prefill.picture);
+    set('#onbBanner', prefill.banner || state.settings.banner);
+    set('#onbBio', prefill.about);
+    set('#onbWebsite', prefill.website || state.settings.website);
+    set('#onbLud16', prefill.lud16 || state.settings.lud16);
+    set('#onbNip05', prefill.nip05);
+
+    // Reset to step 1
+    onbSetStep(1);
+
+    // Update avatar preview
+    onbUpdatePreview();
 
     modal.classList.add('open');
+    // Also close login modal if open
+    const loginModal = qs('#loginModal');
+    if (loginModal) loginModal.classList.remove('open');
+  }
+
+  function onbSetStep(n) {
+    const s1 = qs('#onbStep1'), s2 = qs('#onbStep2');
+    const d1 = qs('#onbDot1'), d2 = qs('#onbDot2');
+    const line = qs('#onbStepLine');
+    if (n === 1) {
+      if (s1) s1.classList.add('active');
+      if (s2) s2.classList.remove('active');
+      if (d1) { d1.classList.add('active'); d1.classList.remove('done'); }
+      if (d2) { d2.classList.remove('active', 'done'); }
+      if (line) line.classList.remove('done');
+    } else {
+      if (s1) s1.classList.remove('active');
+      if (s2) s2.classList.add('active');
+      if (d1) { d1.classList.remove('active'); d1.classList.add('done'); }
+      if (d2) { d2.classList.add('active'); d2.classList.remove('done'); }
+      if (line) line.classList.add('done');
+    }
   }
 
   function closeOnboarding() {
@@ -2899,35 +3022,96 @@
     if (modal) modal.classList.remove('open');
   }
 
-  async function copyOnboardingNsec() {
-    const value = state.pendingOnboardingNsec || (qs('#onbNsecValue') && qs('#onbNsecValue').textContent) || '';
-    if (!value) return;
+  // Called from HTML: reveal the blurred nsec
+  function onbRevealNsec() {
+    const el = qs('#onbNsecValue');
+    const btn = qs('#onbRevealBtn');
+    if (!el) return;
+    const revealed = el.classList.toggle('revealed');
+    if (btn) btn.textContent = revealed ? '🙈 Hide' : '👁 Reveal';
+  }
 
+  // Called from HTML: copy nsec to clipboard
+  async function onbCopyNsec() {
+    const value = state.pendingOnboardingNsec || (qs('#onbNsecValue') && qs('#onbNsecValue').textContent) || '';
+    if (!value || value === 'nsec1...') return;
     try {
       await navigator.clipboard.writeText(value);
       const btn = qs('#onbCopyBtn');
       if (btn) {
-        btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1300);
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
       }
+      // Also reveal so user can verify what was copied
+      const el = qs('#onbNsecValue');
+      if (el) { el.classList.add('revealed'); }
+      const revBtn = qs('#onbRevealBtn');
+      if (revBtn) revBtn.textContent = '🙈 Hide';
     } catch (_) {
-      alert('Copy failed. Please copy the nsec manually.');
+      alert('Clipboard blocked. Please manually select and copy the key.');
     }
   }
 
+  // Kept for backward compatibility (old HTML may call this)
+  async function copyOnboardingNsec() { return onbCopyNsec(); }
+
+  // Called when checkbox changes
+  function onbCheckSaved() {
+    const check = qs('#onbSavedCheck');
+    const btn = qs('#onbContinueBtn');
+    if (!btn) return;
+    if (check && check.checked) {
+      btn.classList.add('ready');
+    } else {
+      btn.classList.remove('ready');
+    }
+  }
+
+  // Advance to profile step
+  function onbGoToProfile() {
+    const check = qs('#onbSavedCheck');
+    if (!check || !check.checked) return;
+    onbSetStep(2);
+    onbUpdatePreview();
+  }
+
+  // Go back to key step
+  function onbBackToKey() {
+    onbSetStep(1);
+  }
+
+  // Live avatar preview update
+  function onbUpdatePreview() {
+    const circle = qs('#onbAvatarPreview');
+    if (!circle) return;
+    const url = (qs('#onbAvatar') && qs('#onbAvatar').value.trim()) || '';
+    const name = (qs('#onbDisplayName') && qs('#onbDisplayName').value.trim()) || '';
+    if (url) {
+      circle.innerHTML = `<img src="${url}" alt="" onerror="this.parentElement.innerHTML='${name ? name[0].toUpperCase() : '?'}'">`;
+    } else {
+      circle.innerHTML = name ? name[0].toUpperCase() : '?';
+    }
+    if (url) circle.style.borderColor = 'var(--green)';
+    else circle.style.borderColor = '';
+  }
+
   async function completeOnboarding() {
+    const saveBtn = qs('#onbSaveBtn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
     const profileData = {
       name: (qs('#onbDisplayName') && qs('#onbDisplayName').value.trim()) || shortHex(state.user ? state.user.pubkey : ''),
       picture: (qs('#onbAvatar') && qs('#onbAvatar').value.trim()) || '',
       banner: (qs('#onbBanner') && qs('#onbBanner').value.trim()) || '',
       about: (qs('#onbBio') && qs('#onbBio').value.trim()) || '',
       website: (qs('#onbWebsite') && qs('#onbWebsite').value.trim()) || '',
-      lud16: (qs('#onbLud16') && qs('#onbLud16').value.trim()) || ''
+      lud16: (qs('#onbLud16') && qs('#onbLud16').value.trim()) || '',
+      nip05: (qs('#onbNip05') && qs('#onbNip05').value.trim()) || ''
     };
 
     try {
       await publishUserProfile(profileData);
-
       const nextSettings = {
         ...state.settings,
         website: profileData.website || state.settings.website,
@@ -2935,10 +3119,10 @@
         lud16: profileData.lud16 || state.settings.lud16
       };
       applySettings(nextSettings, { reconnect: false });
-
       closeOnboarding();
     } catch (err) {
-      alert(err.message || 'Failed to publish profile.');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✓ Save & Enter NostrFlux'; }
+      alert(err.message || 'Failed to publish profile. Please try again.');
     }
   }
 
@@ -3217,6 +3401,9 @@
           state.hlsInstance = null;
         }
         state.playbackToken++;
+        // Stop runtime ticker
+        clearInterval(state._theaterRuntimeInterval);
+        state._theaterRuntimeInterval = null;
       }
 
       // --- Profile mini-player ---
@@ -3642,6 +3829,12 @@
     window.completeOnboarding = completeOnboarding;
     window.skipOnboarding = skipOnboarding;
     window.closeOnboarding = closeOnboarding;
+    window.onbRevealNsec = onbRevealNsec;
+    window.onbCopyNsec = onbCopyNsec;
+    window.onbCheckSaved = onbCheckSaved;
+    window.onbGoToProfile = onbGoToProfile;
+    window.onbBackToKey = onbBackToKey;
+    window.onbUpdatePreview = onbUpdatePreview;
     window.openStreamFromProfile = openStreamFromProfile;
 
     window.openFaq = function () { qs('#faqModal').classList.add('open'); };
@@ -3670,6 +3863,16 @@
     window.toggleLike = function () {
       sendReaction();
     };
+
+    window.toggleTheaterFollow = function () {
+      const stream = state.streamsByAddress.get(state.selectedStreamAddress);
+      if (!stream) return;
+      if (!state.user) { window.openLogin(); return; }
+      // Re-use the profile follow toggle
+      state.selectedProfilePubkey = stream.pubkey;
+      toggleFollowSelectedProfile();
+      updateTheaterFollowBtn(stream.pubkey);
+    };
   }
 
   function initEmojiPicker() {
@@ -3694,7 +3897,7 @@
       if (!e.target.closest('.logo-wrap') && !e.target.closest('.nav-profile')) window.closeAllDD();
     });
 
-    ['goLiveModal', 'endModal', 'loginModal', 'settingsModal', 'faqModal', 'onboardingModal'].forEach((id) => {
+    ['goLiveModal', 'endModal', 'loginModal', 'settingsModal', 'faqModal'].forEach((id) => {
       const el = qs(`#${id}`);
       if (!el) return;
       el.addEventListener('click', function (e) {

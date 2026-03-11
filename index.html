@@ -610,7 +610,110 @@ body.no-chat-anim .cmsg{animation:none!important;}
 .end-confirm-modal{background:var(--surface);border:1px solid rgba(255,59,92,.3);border-radius:16px;width:min(340px,94vw);padding:1.5rem;text-align:center;animation:slideUp .2s ease;position:relative;}
 .end-confirm-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--live);border-radius:16px 16px 0 0;}
 
-/* ======== LIST FILTER DROPDOWN ======== */
+/* ======== ONBOARDING MODAL ======== */
+.onboard-modal{width:min(580px,96vw);max-height:92vh;overflow-y:auto;padding:1.4rem 1.5rem 1.5rem;}
+.onboard-step{display:none;}
+.onboard-step.active{display:block;}
+
+/* Step progress bar */
+.onboard-steps-bar{display:flex;align-items:center;gap:0;margin-bottom:1.3rem;}
+.onboard-step-dot{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  background:var(--surface3);border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;font-weight:700;color:var(--muted);
+  font-family:'DM Mono',monospace;transition:all .25s;
+}
+.onboard-step-dot::after{content:attr(data-n);}
+.onboard-step-dot.active{background:var(--green);border-color:var(--green);color:#000;}
+.onboard-step-dot.done{background:rgba(0,212,138,.2);border-color:var(--green);color:var(--green);}
+.onboard-step-line{flex:1;height:2px;background:var(--border2);margin:0 .5rem;transition:background .25s;}
+.onboard-step-line.done{background:var(--green);}
+
+/* Key hero block */
+.onboard-key-hero{
+  background:linear-gradient(135deg,rgba(0,212,138,.05),rgba(155,114,255,.03));
+  border:1px solid rgba(0,212,138,.18);
+  border-radius:12px;padding:1rem 1rem .9rem;margin-bottom:1rem;
+}
+.onboard-key-label{
+  font-family:'DM Mono',monospace;font-size:.61rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--green);margin-bottom:.55rem;
+  display:flex;align-items:center;gap:.4rem;
+}
+.onboard-key-label::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.onboard-nsec-row{
+  display:flex;align-items:center;gap:.55rem;
+  background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.07);
+  border-radius:9px;padding:.55rem .7rem;
+}
+.onboard-nsec-text{
+  flex:1;font-family:'DM Mono',monospace;font-size:.72rem;
+  color:var(--text);word-break:break-all;line-height:1.5;
+  filter:blur(5px);transition:filter .3s;user-select:all;cursor:pointer;
+}
+.onboard-nsec-text.revealed{filter:none;}
+.onboard-nsec-actions{display:flex;flex-direction:column;gap:.35rem;flex-shrink:0;}
+.onboard-reveal-btn,.onboard-copy-btn{
+  padding:.28rem .65rem;border-radius:7px;font-size:.7rem;font-weight:600;
+  cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;
+  transition:all .15s;border:1px solid rgba(0,212,138,.3);color:var(--green);
+}
+.onboard-reveal-btn{background:transparent;}
+.onboard-reveal-btn:hover{background:rgba(0,212,138,.1);}
+.onboard-copy-btn{background:rgba(0,212,138,.1);}
+.onboard-copy-btn:hover{background:rgba(0,212,138,.22);}
+.onboard-copy-btn.copied{background:rgba(0,212,138,.25);border-color:var(--green);color:#00e89a;}
+
+.onboard-warn-box{
+  background:rgba(232,70,10,.05);border:1px solid rgba(232,70,10,.16);
+  border-radius:8px;padding:.6rem .75rem;margin-top:.8rem;
+  font-size:.76rem;color:var(--text2);line-height:1.55;
+}
+.onboard-warn-box strong{color:#ff7c5c;}
+
+.onboard-confirm-row{
+  display:flex;align-items:flex-start;gap:.6rem;margin-top:.9rem;
+  padding:.65rem .75rem;border-radius:9px;
+  border:1px solid var(--border);background:var(--surface2);
+  cursor:pointer;transition:border-color .2s;
+}
+.onboard-confirm-row:has(.onboard-checkbox:checked){border-color:var(--green);background:rgba(0,212,138,.04);}
+.onboard-checkbox{
+  width:15px;height:15px;flex-shrink:0;margin-top:.15rem;
+  accent-color:var(--green);cursor:pointer;
+}
+.onboard-confirm-label{font-size:.79rem;color:var(--text2);line-height:1.5;cursor:pointer;user-select:none;}
+
+.onboard-continue-btn{
+  width:100%;margin-top:.9rem;padding:.65rem 1rem;border-radius:9px;
+  font-size:.84rem;font-weight:700;font-family:'Syne',sans-serif;letter-spacing:.01em;
+  background:var(--green);color:#000;border:none;cursor:pointer;
+  transition:all .2s;opacity:.35;pointer-events:none;
+}
+.onboard-continue-btn.ready{opacity:1;pointer-events:all;}
+.onboard-continue-btn.ready:hover{background:#00e89a;box-shadow:0 0 22px rgba(0,212,138,.4);}
+
+/* Profile step */
+.onboard-avatar-preview-row{display:flex;align-items:flex-start;gap:.9rem;margin-bottom:.9rem;}
+.onboard-avatar-circle{
+  width:72px;height:72px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--zap));
+  border:2px solid var(--border2);overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;color:#fff;font-family:'Syne',sans-serif;font-weight:800;
+  transition:border-color .2s;
+}
+.onboard-avatar-circle img{width:100%;height:100%;object-fit:cover;display:block;}
+.onboard-avatar-fields{flex:1;display:flex;flex-direction:column;gap:.5rem;}
+.onboard-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.3rem;}
+.onboard-form-grid .fg.full{grid-column:1/-1;}
+.onboard-field-hint{font-size:.63rem;color:var(--muted);margin-top:.18rem;font-family:'DM Mono',monospace;}
+.onboard-footer-row{
+  display:flex;gap:.5rem;justify-content:flex-end;align-items:center;
+  padding-top:1rem;border-top:1px solid var(--border);margin-top:1rem;
+}
+.onboard-footer-row .btn-ghost:first-child{margin-right:auto;}
 .sec-hd-left{display:flex;align-items:center;gap:.55rem;flex:1;min-width:0;}
 .list-filter-wrap{position:relative;flex-shrink:0;}
 .list-filter-btn{
@@ -1011,7 +1114,7 @@ footer p{font-size:.72rem;color:var(--muted);}
       </div>
       <div class="lm-warn">Entering your private key is less secure. NostrFlux never sends your key to any server.</div>
       <div class="lm-div"><span>or</span></div>
-      <div class="lo" onclick="loginDemo('newnostr',','npub1new...key','')" style="border-color:rgba(0,212,138,.2);">
+      <div class="lo" onclick="loginDemo('newnostr')" style="border-color:rgba(0,212,138,.2);">
         <div class="lo-ico new"></div>
         <div><div class="lo-t">Create New Identity</div><div class="lo-d">Generate a fresh keypair. No email, no phone - just cryptography.</div></div>
         <div class="lo-arr"></div>
@@ -1023,32 +1126,102 @@ footer p{font-size:.72rem;color:var(--muted);}
 <!-- ========= ONBOARDING MODAL ========= -->
 <div class="modal-ov" id="onboardingModal">
   <div class="settings-modal onboard-modal">
-    <button class="mclose" style="position:absolute;top:1rem;right:1rem;" onclick="closeOnboarding()">x</button>
-    <div class="sm-hd"><div class="sm-title">Create Your Nostr Profile</div></div>
-    <div class="sm-body">
-      <div class="onboard-secret-block">
-        <div class="onboard-secret-label">Your private key (nsec)</div>
-        <div class="onboard-secret-row">
-          <code id="onbNsecValue">nsec1...</code>
-          <button class="btn btn-ghost" style="padding:.32rem .6rem;" onclick="copyOnboardingNsec()" id="onbCopyBtn">Copy</button>
+    <button class="mclose" style="position:absolute;top:1rem;right:1rem;z-index:2;" onclick="closeOnboarding()">&#x2715;</button>
+
+    <!-- Step indicator -->
+    <div class="onboard-steps-bar">
+      <div class="onboard-step-dot active" id="onbDot1" data-n="1"></div>
+      <div class="onboard-step-line" id="onbStepLine"></div>
+      <div class="onboard-step-dot" id="onbDot2" data-n="2"></div>
+    </div>
+
+    <!-- ── STEP 1: Save your key ── -->
+    <div class="onboard-step active" id="onbStep1">
+      <div class="sm-hd" style="padding-bottom:.5rem">
+        <div class="sm-title">Save Your Private Key</div>
+        <div style="font-size:.78rem;color:var(--text2);margin-top:.2rem">This is your Nostr identity. Lose it and there's no recovery.</div>
+      </div>
+
+      <div class="onboard-key-hero">
+        <div class="onboard-key-label">Your nsec (private key)</div>
+        <div class="onboard-nsec-row">
+          <div class="onboard-nsec-text" id="onbNsecValue">nsec1...</div>
+          <div class="onboard-nsec-actions">
+            <button class="onboard-reveal-btn" id="onbRevealBtn" onclick="onbRevealNsec()">&#128065; Reveal</button>
+            <button class="onboard-copy-btn" id="onbCopyBtn" onclick="onbCopyNsec()">&#128203; Copy</button>
+          </div>
         </div>
-        <div class="onboard-secret-warn">Save this now. Anyone with this key controls your account.</div>
+        <div class="onboard-warn-box">
+          <strong>&#9888; Never share this key.</strong> Anyone who has it owns your identity forever. NostrFlux never sends it to any server — it lives only in your browser.
+        </div>
       </div>
 
-      <div class="onboard-grid">
-        <div class="fg"><label>Display Name</label><input id="onbDisplayName" type="text" placeholder="SatsStreamer"></div>
-        <div class="fg"><label>Avatar Emoji/URL</label><input id="onbAvatar" type="text" placeholder=" or https://.../avatar.jpg"></div>
-        <div class="fg full"><label>Banner URL</label><input id="onbBanner" type="text" placeholder="https://.../banner.jpg"></div>
-        <div class="fg full"><label>Bio</label><textarea id="onbBio" placeholder="Tell people what you stream and build..."></textarea></div>
-        <div class="fg"><label>Website</label><input id="onbWebsite" type="text" placeholder="https://your-site.com"></div>
-        <div class="fg"><label>Lightning Address (lud16)</label><input id="onbLud16" type="text" placeholder="you@getalby.com"></div>
+      <label class="onboard-confirm-row" id="onbConfirmRow">
+        <input type="checkbox" class="onboard-checkbox" id="onbSavedCheck" onchange="onbCheckSaved()">
+        <span class="onboard-confirm-label">I have saved my private key somewhere safe (password manager, paper, hardware wallet).</span>
+      </label>
+
+      <button class="onboard-continue-btn" id="onbContinueBtn" onclick="onbGoToProfile()">
+        Continue to Profile Setup &#8594;
+      </button>
+    </div>
+
+    <!-- ── STEP 2: Build your profile ── -->
+    <div class="onboard-step" id="onbStep2">
+      <div class="sm-hd" style="padding-bottom:.5rem">
+        <div class="sm-title">Build Your Profile</div>
+        <div style="font-size:.78rem;color:var(--text2);margin-top:.2rem">All fields optional — you can update anytime from Settings.</div>
       </div>
 
-      <div class="sm-save-row" style="margin-top:1rem;justify-content:flex-end;display:flex;gap:.5rem;">
-        <button class="btn btn-ghost" onclick="skipOnboarding()">Skip For Now</button>
-        <button class="btn btn-primary" onclick="completeOnboarding()">Save & Enter</button>
+      <!-- Avatar preview + name row -->
+      <div class="onboard-avatar-preview-row">
+        <div class="onboard-avatar-circle" id="onbAvatarPreview">?</div>
+        <div class="onboard-avatar-fields">
+          <div class="fg" style="margin:0">
+            <label>Display Name</label>
+            <input id="onbDisplayName" type="text" placeholder="SatsStreamer" oninput="onbUpdatePreview()">
+          </div>
+          <div class="fg" style="margin:0">
+            <label>Avatar URL</label>
+            <input id="onbAvatar" type="url" placeholder="https://example.com/avatar.jpg" oninput="onbUpdatePreview()">
+            <div class="onboard-field-hint">Direct image link — paste from Imgur, Nostr.build, etc.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="onboard-form-grid">
+        <div class="fg full" style="margin:0">
+          <label>Bio</label>
+          <textarea id="onbBio" placeholder="Tell people what you stream, build, or obsess over..." style="height:70px;resize:none;"></textarea>
+        </div>
+        <div class="fg" style="margin:0">
+          <label>Banner URL</label>
+          <input id="onbBanner" type="url" placeholder="https://example.com/banner.jpg">
+          <div class="onboard-field-hint">1500×500 recommended</div>
+        </div>
+        <div class="fg" style="margin:0">
+          <label>Website</label>
+          <input id="onbWebsite" type="url" placeholder="https://your-site.com">
+        </div>
+        <div class="fg" style="margin:0">
+          <label>Lightning Address (lud16)</label>
+          <input id="onbLud16" type="text" placeholder="you@getalby.com">
+          <div class="onboard-field-hint">For receiving Zaps &#9889;</div>
+        </div>
+        <div class="fg" style="margin:0">
+          <label>NIP-05 Identifier</label>
+          <input id="onbNip05" type="text" placeholder="you@yourdomain.com">
+          <div class="onboard-field-hint">Verifies your identity on Nostr</div>
+        </div>
+      </div>
+
+      <div class="onboard-footer-row">
+        <button class="btn btn-ghost" onclick="onbBackToKey()">&#8592; Back</button>
+        <button class="btn btn-ghost" onclick="skipOnboarding()">Skip</button>
+        <button class="btn btn-primary" id="onbSaveBtn" onclick="completeOnboarding()">&#10003; Save &amp; Enter NostrFlux</button>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -1170,19 +1343,6 @@ footer p{font-size:.72rem;color:var(--muted);}
     </div>
   </div>
 
-  <div class="cat-strip">
-    <button class="cat-chip active">All Live</button>
-    <button class="cat-chip">Gaming</button>
-    <button class="cat-chip">Bitcoin</button>
-    <button class="cat-chip">Coding</button>
-    <button class="cat-chip">Music</button>
-    <button class="cat-chip">Talk</button>
-    <button class="cat-chip">Education</button>
-    <button class="cat-chip">Art</button>
-    <button class="cat-chip">Fitness</button>
-    <button class="cat-chip">IRL</button>
-  </div>
-
   <div class="stream-main">
     <!-- Live Now header with list filter -->
     <div class="live-now-hd">
@@ -1281,21 +1441,21 @@ footer p{font-size:.72rem;color:var(--muted);}
           </div>
           <!-- Actions: Zap, Follow, Share, Like, Report -->
           <div class="sib-actions-row">
-            <button class="btn btn-zap" style="padding:.36rem .8rem;font-size:.79rem;">Zap</button>
-            <button class="btn btn-follow" style="padding:.36rem .8rem;font-size:.79rem;">+ Follow</button>
+            <button class="btn btn-zap" style="padding:.36rem .8rem;font-size:.79rem;">⚡ Zap</button>
+            <button class="btn btn-follow" id="theaterFollowBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="toggleTheaterFollow()">+ Follow</button>
             <button class="action-btn share-btn">Share</button>
-            <button class="action-btn like-btn" id="likeBtn" onclick="toggleLike()"> <span id="likeCount">842</span></button>
-            <button class="action-btn report-btn" title="Report stream"></button>
+            <button class="action-btn like-btn" id="likeBtn"> <span id="likeCount">0</span></button>
+            <button class="action-btn report-btn" title="Report stream">⚑</button>
           </div>
         </div>
 
-        <!-- Stats row - followers included here now -->
+        <!-- Stats row -->
         <div class="sib-stats-row">
-          <div class="ss fol"><span class="n">12.4k</span> <span class="l">followers</span></div>
-          <div class="ss lv"><span class="n">2,105</span> <span class="l">watching</span></div>
-          <div class="ss zap"><span class="n">88,800</span> <span class="l">sats</span></div>
-          <div class="ss"><span class="n">1h 24m</span> <span class="l">live</span></div>
-          <div class="ss"><span class="n">4</span> <span class="l">relays</span></div>
+          <div class="ss fol"><span class="n" id="theaterFollowers">—</span> <span class="l">followers</span></div>
+          <div class="ss lv"><span class="n" id="theaterViewers">—</span> <span class="l">watching</span></div>
+          <div class="ss zap"><span class="n" id="theaterSats">—</span> <span class="l">sats</span></div>
+          <div class="ss"><span class="n" id="theaterRuntime">—</span> <span class="l">live</span></div>
+          <div class="ss"><span class="n" id="theaterRelays">—</span> <span class="l">relays</span></div>
         </div>
 
         <!-- Editable summary -->
