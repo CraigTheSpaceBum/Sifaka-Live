@@ -1,516 +1,209 @@
-# Craig The Space Bum's Nostr Live Stream App
+# NostrLiveStream
 https://craigthespacebum.github.io/NostrLiveStream/
 
+NostrLiveStream is an experimental **decentralized livestreaming platform built on Nostr**.
 
-# Nostr Live Development Roadmap
+It allows creators to stream content while leveraging the **Nostr protocol for identity, chat, discovery, and social interaction**, removing the need for centralized accounts.
 
-This document outlines the current **bugs, features, and development priorities** for the NostrFlux project. Name is pending. Open to suggestions.
-
-The goal is to stabilize the application first, then expand it into a full **Nostr live streaming and social client**.
-
----
-
-# 🚨 P0 – Critical Bugs (Fix First)
-
-These issues break core functionality or make the app feel broken.
-
-## Core Functionality
-
-- Fix **Follow button**
-- Fix **Report button**
-- Fix **Like feature not working** (posts and comments)
-- Fix **post video URLs not playing**
-- Fix **post images being massive**
-- Fix **chat posting duplicate messages**
-- Fix **zap button**
-- Fix **+Follow, Like, Report buttons in Theader Mode**
-- Fix **Live Now page not working**
-
-## Data / Counters
-
-- Fix **Followers count**
-- Fix **Sats received**
-- Fix **How long stream has been live**
-
-## Layout Breaks
-
-- Fix **Ultra-wide screen layout**
-- Fix **Profile stat box alignment**
-
-### Goal
-
-Users must be able to:
-
-- Watch streams
-- Follow people
-- Post content
-- Chat during streams
-
-Without encountering major bugs.
+The goal of the project is to build a **Twitch-style experience powered entirely by Nostr identities (npub/nsec)**.
 
 ---
 
-# 🧩 P1 – Core Features (Needed for a Real Release)
+# Current Working Features
 
-These features make the platform feel like a complete product.
+## Core Nostr Integration
+- Login using **Nostr keys (nsec / browser extensions)**.
+- Profile loading from **Nostr metadata events**.
+- Basic **relay connectivity**.
+- Viewing Nostr profiles.
 
-## Nostr Ecosystem
+## Profiles
+- Profile page displaying:
+  - Bio
+  - Followers
+  - Following
+  - Post count
+  - Stream count
+- Video and photo content tabs.
+- Ability to view posts from a user.
 
-- Add more relays such as:
-  - Damus
-  - zap.stream
-  - nostr.wine
-  - snort
-  - primal
+## Streaming / Theater Mode
+- Stream viewing interface.
+- Chat window integrated with Nostr events.
+- Basic livestream UI layout.
 
-- Improve **Settings UI structure**
-
-### Settings should be separated into:
-
-**Nostr Profile Settings**
-- Name
-- Bio
-- Profile picture
-- Banner
-- NIP-05
-- Lightning address
-
-**Relay Settings**
-- Add relay
-- Remove relay
-- Relay connection status
-
-**Website Settings**
-- Theme selection
-- Autoplay streams
-- Other app preferences
+## Social Features
+- Follow button (currently unstable).
+- Share button (UI present but incomplete).
+- Basic chat functionality in livestream chat.
 
 ---
 
-## Profile System
+# Known Issues
 
-- Merge **Videos tab + Photos tab**
-- Add **post box on your own profile**
-- Add **expand comments window**
-
-### Share Options
-
-Clicking the **Share button** should open a popup allowing:
-
-- Copy URL link
-- Share as a Nostr post
-- Share to social media:
-  - Twitter
-  - Facebook
-  - Telegram
-  - Discord
+## General
+- Search bar currently does **not support hashtag searching**.
+- Limited relay connections.
+- Past streams remain in the menu and should be removed.
+- Settings UI layout needs improvement.
 
 ---
 
-## Streaming Experience
+# Profile Issues
 
-- **Featured video autoplay**
-- Show **stream thumbnail URL**
-- If no thumbnail exists, show **LIVE indicator**
+### Layout
+- Profile statistics box does not align properly with the bio section.
 
-### Mini Player
+### Profile stats should display in this order:
 
-When leaving **Theader Mode**:
+**Top Row**
+- Followers
+- Following
 
-- Video continues playing in a **mini player**
-- Mini player appears in a corner of the screen
-- Clicking the mini player returns to the stream
+**Second Row**
+- Post Count
+- Stream Count
 
-### Goal
+**Bottom Row**
+- Time on Nostr
+- Total Sats Received
 
-The app should feel like a **complete Nostr streaming + social platform**.
+### Additional Profile Issues
+- Videos tab and Photos tab should be merged into one **Media** tab.
+- Images inside posts are currently **too large**.
+- Video URLs inside posts **do not autoplay or render correctly**.
+- Follow button functionality is inconsistent.
+- Emoji count display should be removed.
+- Report button currently does not function.
 
----
-
-# 🎨 P2 – UX Improvements
-
-These improvements focus on polishing the user experience.
-
-## UI Improvements
-
-- Fix **Settings UI design**
-- Fix **Profile stats layout**
-
-### Profile Stats Layout
-
-Suggested layout:
-
-```
-Followers | Following
-Posts     | Streams
-Time on Nostr
-Sats Received
-```
+### Missing Interaction Features
+- No **like system** for posts or comments.
+- Comments cannot expand into a dedicated view.
+- Users cannot easily create a post from their own profile page.
 
 ---
 
-## Chat UI
+# Theater Mode Issues
 
-- Remove **Viewer count tab**
-- Remove **settings button from chatbox**
+### Chat
+- Viewer count tab ("Viewers 2.1k") should be removed.
+- Messages posted in chat appear **multiple times from the same user** (while other clients show it once).
+- Chat settings button should be removed.
 
----
+### Layout
+- Ultra-wide monitor support needs fixing.
 
-## Profile UI
+### Buttons Not Working
+The following controls currently do not function correctly:
 
-- Remove **emoji reaction count**
+- Zap
+- Follow
+- Like
+- Report
 
-### Badge System
-
-If a user has badges:
-
-- Split the **bio box into two sections**
-- Display badges in the second section
-
-Badge interactions:
-
-- Clicking a badge opens a **popup**
-- Popup shows full **badge details**
+### Stream Discovery
+- **Live Now** functionality is currently broken.
 
 ---
 
-## Live Page
+# Planned Features
 
-- Remove **category button row**
+## Search
+- Expand search bar to support **hashtags**.
 
-### Goal
+## Relay Improvements
+Add more relay connections such as:
 
-Make the interface **clean, simple, and easier to navigate**.
+- `damus`
+- `zap.stream`
+- additional high-availability relays
 
 ---
-
-# 🚀 P3 – Future Features (After Stable Release)
-
-These features expand the platform and improve discoverability.
 
 ## Social Features
 
-- Add **Groups**
-- Add **Lists**
-- Add **Feed**
-
 ### Groups
-
-Users can join topic-based communities such as:
-
-- Bitcoin
-- Gaming
-- Music
-- Coding
-
-## Groups (Discord-Style Communities on Nostr)
-
-Groups will function similarly to **Discord servers**, but built using the **Nostr protocol**.
-
-Each group acts as a community hub where users can communicate, share posts, and watch streams together.
-
-### Group Structure
-
-Each group contains:
-
-- Group name
-- Group description
-- Group icon
-- Group banner
-- Group owner
-- Moderators
-- Members
-
-Example:
-
-Bitcoin Builders
-```
-Owner: pubkey
-Members: 1,243
-Description: Community for Bitcoin developers
-```
-
----
-
-### Channels
-
-Each group can contain multiple channels, similar to Discord.
-
-Channel types:
-
-**Text Channels**
-
-Examples:
-
-```
-#general
-#announcements
-#nostr-dev
-#memes
-```
-
-Features:
-- Post messages
-- Reply to threads
-- Share media
-- Zap messages
-
----
-
-**Live Stream Channels**
-
-Channels where members can stream live.
-
-Example:
-
-```
-🔴 live-streams
-```
-
-Features:
-
-- Host live streams
-- Chat during stream
-- Send zaps to streamers
-
----
-
-### Permissions
-
-Groups support role-based permissions.
-
-Roles may include:
-
-- Owner
-- Admin
-- Moderator
-- Member
-
-Permissions may include:
-
-- Create channels
-- Delete posts
-- Moderate chat
-- Start streams
-- Invite users
-
----
-
-### Joining Groups
-
-Users can join groups through:
-
-- Invite link
-- Public discovery
-- Friend invites
-
-Example invite link:
-
-```
-nostrflux.com/group/bitcoin-builders
-```
-
----
-
-### Group Discovery
-
-A **Groups Directory** page allows users to discover communities.
-
-Categories may include:
-
-- Bitcoin
-- Gaming
-- Development
-- Music
-- Politics
-- Art
-
-Each group card displays:
-
-- Group icon
-- Member count
-- Short description
-
----
-
-### Notifications
-
-Members receive notifications when:
-
-- Someone posts in a group
-- A group stream goes live
-- They are mentioned
-
----
-
-### Nostr Integration
-
-Groups are built using Nostr events.
-
-Possible implementation:
-
-- Group metadata stored as Nostr events
-- Messages published as Nostr notes
-- Channel IDs referenced through tags
-- Streams announced via live event kinds
-
-This allows groups to remain **decentralized and relay-compatible**.
-
----
-
-### Future Improvements
-
-- Threaded conversations
-- Voice channels
-- Group moderation tools
-- Group-specific feeds
-- Pinned messages
-- Scheduled streams
-
-
----
+Ability to create and join **Nostr Groups**.
 
 ### Lists
+User-created **curated lists of profiles**.
 
-Users can create lists of accounts:
-
-Examples:
-
-- Favorite streamers
-- Friends
-- News sources
-
-Lists can be used to filter feeds.
+### Feed
+A unified **content feed** showing posts from followed users.
 
 ---
 
-## Identity Features
+## Profile Enhancements
 
-### NIP-05 Visual Indicator
+### NIP-05 Identity Indicator
+Profiles with verified **NIP-05 identifiers** will display:
 
-If a user has **NIP-05 verification**:
+- A **glowing purple square** instead of the default purple circle.
 
-Replace the **purple circle avatar border** with a:
+### Badges
+If a user has badges:
 
-**Glowing purple square**
+- Bio section splits into two panels.
+- Badges display in a dedicated area.
+- Clicking a badge opens a **popup with full badge details**.
 
-This visually highlights verified identities.
+### Profile Posting
+If viewing **your own profile**:
 
----
-
-## Search Improvements
-
-Expand the search bar to support:
-
-- **Hashtags**
-
-Example searches:
-
-```
-#bitcoin
-#nostr
-#gaming
-```
-
-Future improvements may include:
-
-- User search
-- Stream search
-- Post search
+- A post composer appears above the posts feed.
 
 ---
 
-## Stream UI Improvements
+## Share Improvements
 
-- Remove **Past Streams menu**
+Clicking the **Share button** will open a dialog offering:
 
-(Streams should only show if currently live.)
-
----
-
-### Goal
-
-Improve **discoverability and social interaction** across the platform.
-
----
-
-# 📊 Recommended Development Order
-
-## Phase 1 – Stabilize App
-
-Fix **ALL P0 bugs**.
-
-Focus on:
-
-- Live streaming
-- Chat functionality
-- Reactions
-- Basic UI stability
+- Copy profile URL
+- Share as a Nostr post
+- Send via social media platforms
+  - Facebook
+  - Twitter
+  - others
 
 ---
 
-## Phase 2 – Make It a Complete Product
+## Settings Improvements
 
-Implement **P1 core features**:
+Settings will be separated into **three distinct sections**:
 
-- Relay improvements
-- Profile functionality
-- Streaming improvements
+### 1. Nostr Profile
+- Display name
+- Bio
+- Picture
+- NIP-05
 
----
+### 2. Relays
+- Add/remove relays
+- Relay status indicators
 
-## Phase 3 – Polish the Experience
-
-Improve **P2 UX features**:
-
-- UI layout improvements
-- Settings redesign
-- Profile improvements
-
----
-
-## Phase 4 – Platform Growth
-
-Add **P3 social and discovery features**:
-
-- Groups
-- Lists
-- Feed
-- Hashtag search
+### 3. Website Settings
+- Theme selection
+- UI preferences
+- Client behavior settings
 
 ---
 
-# 🧠 Development Tracking Recommendation
+# Development Goals
 
-Track development progress using a project management tool such as:
+The long-term goal of **NostrLiveStream** is to provide:
 
-- Trello
-- Notion
-- GitHub Projects
-
-Suggested board columns:
-
-```
-Critical Bugs
-In Progress
-Core Features
-UX Improvements
-Future Ideas
-```
-
-This keeps development organized and makes it easier to prioritize tasks.
+- Fully decentralized livestreaming
+- Native Nostr chat
+- Lightning zap support
+- Identity tied to Nostr keys
+- Open and censorship-resistant streaming infrastructure
 
 ---
 
-# Project Vision
+# Status
 
-NostrFlux aims to become a:
+⚠️ **Project is currently in active development and experimental.**
 
-**Decentralized live streaming and social platform powered by Nostr and Bitcoin zaps.**
+Expect bugs, missing features, and UI changes as development continues.
 
-The platform focuses on:
-
-- Open protocols
-- Creator monetization
-- Decentralized identity
-- Real-time live interaction
+Contributions and testing feedback are welcome.
