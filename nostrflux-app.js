@@ -2171,13 +2171,31 @@
         a.textContent = '▶ Open HLS stream';
         frame.appendChild(a);
       } else {
+        // Build video with fallback link on error
         const v = document.createElement('video');
-        v.src = m.url;
         v.controls = true;
         v.playsInline = true;
         v.muted = true;
         v.autoplay = false;
         v.preload = 'metadata';
+        // Use <source> for better error handling
+        const src = document.createElement('source');
+        src.src = m.url;
+        // Guess MIME type
+        const ext = m.url.split('?')[0].toLowerCase().split('.').pop();
+        const mimes = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/mp4', m4v: 'video/mp4', mkv: 'video/x-matroska' };
+        if (mimes[ext]) src.type = mimes[ext];
+        v.appendChild(src);
+        // On error, swap to a clickable link fallback
+        v.addEventListener('error', () => {
+          const fallback = document.createElement('a');
+          fallback.href = m.url;
+          fallback.target = '_blank';
+          fallback.rel = 'noopener noreferrer';
+          fallback.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;min-height:80px;color:var(--zap);font-size:.74rem;font-weight:600;text-decoration:none;padding:.75rem;';
+          fallback.textContent = '▶ Open Video';
+          frame.replaceChild(fallback, v);
+        });
         frame.appendChild(v);
       }
       container.appendChild(frame);
@@ -2481,7 +2499,6 @@
         frame.appendChild(fallback);
       } else {
         const video = document.createElement('video');
-        video.src = item.url;
         video.controls = true;
         video.autoplay = false;
         video.loop = false;
@@ -2489,6 +2506,20 @@
         video.defaultMuted = true;
         video.playsInline = true;
         video.preload = 'metadata';
+        // Use <source> for better cross-origin/MIME support
+        const src = document.createElement('source');
+        src.src = item.url;
+        const ext = item.url.split('?')[0].toLowerCase().split('.').pop();
+        const mimes = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/mp4', m4v: 'video/mp4' };
+        if (mimes[ext]) src.type = mimes[ext];
+        video.appendChild(src);
+        // Fallback link on error
+        video.addEventListener('error', () => {
+          const fb = document.createElement('div');
+          fb.className = 'profile-video-fallback';
+          fb.innerHTML = `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--zap)">▶ Open Video</a>`;
+          frame.replaceChild(fb, video);
+        });
         frame.appendChild(video);
       }
 
@@ -2566,6 +2597,125 @@
       if (btn) btn.classList.toggle('active', key === tab);
       const pane = qs(`#profileTab${tabMap[key]}`);
       if (pane) pane.classList.toggle('on', key === tab);
+    });
+  }
+
+  /* =====================================================================
+     NOSTR BADGES (NIP-58)
+     kind:8  = Badge Award (issued to a pubkey)
+     kind:30009 = Badge Definition (created by issuer)
+     ===================================================================== */
+
+  // badgesByPubkey: Map<pubkey, Map<badgeId, { award, definition }>>
+  if (!state.badgesByPubkey) state.badgesByPubkey = new Map();
+  if (!state.badgeSubId) state.badgeSubId = null;
+  if (!state.badgeDefMap) state.badgeDefMap = new Map(); // Map<"pubkey:d", definition event>
+
+  function subscribeBadges(pubkey) {
+    if (!pubkey) return;
+    if (state.badgeSubId) { state.pool.unsubscribe(state.badgeSubId); state.badgeSubId = null; }
+
+    if (!state.badgesByPubkey.has(pubkey)) state.badgesByPubkey.set(pubkey, new Map());
+
+    // Fetch kind:8 badge awards where this pubkey is tagged
+    state.badgeSubId = state.pool.subscribe(
+      [{ kinds: [8], '#p': [pubkey], limit: 100 }],
+      {
+        event: (ev) => {
+          if (ev.kind !== 8) return;
+          // Each award references a badge definition via 'a' tag: "30009:creatorPubkey:d-tag"
+          const aTags = (ev.tags || []).filter((t) => t[0] === 'a' && t[1]);
+          aTags.forEach((aTag) => {
+            const parts = aTag[1].split(':');
+            if (parts[0] !== '30009' || !parts[1] || !parts[2]) return;
+            const defKey = `${parts[1]}:${parts[2]}`;
+            const awardMap = state.badgesByPubkey.get(pubkey);
+            if (!awardMap.has(defKey)) {
+              awardMap.set(defKey, { award: ev, definition: state.badgeDefMap.get(defKey) || null });
+              // Fetch definition if not cached
+              if (!state.badgeDefMap.has(defKey)) fetchBadgeDefinition(parts[1], parts[2]);
+            }
+          });
+          renderProfileBadges(pubkey);
+        },
+        eose: () => { renderProfileBadges(pubkey); }
+      }
+    );
+  }
+
+  function fetchBadgeDefinition(creatorPubkey, d) {
+    const defKey = `${creatorPubkey}:${d}`;
+    if (state.badgeDefMap.has(defKey)) return;
+    const subId = state.pool.subscribe(
+      [{ kinds: [30009], authors: [creatorPubkey], '#d': [d], limit: 1 }],
+      {
+        event: (ev) => {
+          if (ev.kind !== 30009) return;
+          state.badgeDefMap.set(defKey, ev);
+          // Update any awaiting badge entries
+          state.badgesByPubkey.forEach((awardMap, pubkey) => {
+            if (awardMap.has(defKey)) {
+              awardMap.get(defKey).definition = ev;
+              if (state.selectedProfilePubkey === pubkey) renderProfileBadges(pubkey);
+            }
+          });
+          state.pool.unsubscribe(subId);
+        },
+        eose: () => { state.pool.unsubscribe(subId); }
+      }
+    );
+  }
+
+  function getBadgeDefTag(ev, tagName) {
+    if (!ev || !Array.isArray(ev.tags)) return '';
+    const t = ev.tags.find((t) => t[0] === tagName);
+    return t ? (t[1] || '') : '';
+  }
+
+  function renderProfileBadges(pubkey) {
+    const panel = qs('#profileBadgesPanel');
+    const grid = qs('#profileBadgesGrid');
+    const bioGrid = qs('#profileBioGrid');
+    if (!panel || !grid || !bioGrid) return;
+
+    const awardMap = state.badgesByPubkey.get(pubkey);
+    const badges = awardMap ? Array.from(awardMap.values()) : [];
+
+    if (!badges.length) {
+      panel.style.display = 'none';
+      bioGrid.classList.remove('has-badges');
+      return;
+    }
+
+    panel.style.display = 'block';
+    bioGrid.classList.add('has-badges');
+    grid.innerHTML = '';
+
+    badges.forEach(({ award, definition }) => {
+      const chip = document.createElement('div');
+      chip.className = 'profile-badge-chip';
+
+      const image = getBadgeDefTag(definition, 'image') || getBadgeDefTag(definition, 'thumb');
+      const name = getBadgeDefTag(definition, 'name') || getBadgeDefTag(definition, 'd') || '🏅';
+      const desc = getBadgeDefTag(definition, 'description');
+
+      if (image && isLikelyUrl(image)) {
+        const img = document.createElement('img');
+        img.src = image;
+        img.alt = name;
+        img.loading = 'lazy';
+        img.onerror = () => { chip.textContent = '🏅'; };
+        chip.appendChild(img);
+      } else {
+        chip.textContent = '🏅';
+      }
+
+      chip.title = name;
+      chip.addEventListener('click', () => {
+        openBadgePopup({ name, desc, image, definition, award });
+      });
+
+      grid.appendChild(chip);
     });
   }
 
@@ -2851,6 +3001,7 @@
     renderProfileFeed(pubkey);
     renderProfileCollections(pubkey);
     renderProfileFollowButton(pubkey);
+    renderProfileBadges(pubkey);
     setProfileTab(state.profileTab || 'streams');
   }
 
@@ -2867,6 +3018,7 @@
     renderProfilePage(pubkey);
     subscribeProfileFeed(pubkey);
     subscribeProfileStats(pubkey);
+    subscribeBadges(pubkey);
   }
 
   function toggleFollowSelectedProfile() {
@@ -3646,33 +3798,102 @@
       }
     };
 
-    window.addProfileToList = function () {
+    // ---- Add-to-List dropdown (NIP-51) ----
+    function renderAtlDropdown() {
+      const itemsEl = qs('#atlListItems');
+      if (!itemsEl) return;
+      itemsEl.innerHTML = '';
+
+      const lists = Array.from(state.nip51Lists.values());
+      if (!lists.length) {
+        itemsEl.innerHTML = '<div class="atl-empty">No lists yet — create one below.</div>';
+        return;
+      }
+
       const pubkey = state.selectedProfilePubkey;
-      if (!pubkey) return;
+      lists.forEach((list) => {
+        const btn = document.createElement('button');
+        btn.className = 'atl-item';
+        const inList = pubkey && list.pubkeys.includes(pubkey);
+        btn.textContent = (inList ? '✓ ' : '') + (list.name || 'Unnamed List');
+        if (inList) btn.classList.add('atl-saved');
+        btn.addEventListener('click', async () => {
+          if (!pubkey) return;
+          if (!state.user) { window.openLogin(); return; }
+          try {
+            const tags = [];
+            list.pubkeys.forEach((pk) => tags.push(['p', pk]));
+            if (!inList) tags.push(['p', pubkey]);
+            tags.push(['d', list.d]);
+            if (list.name) tags.push(['name', list.name]);
+            await signAndPublish(30000, '', tags);
+            // Optimistically update local
+            if (!inList) list.pubkeys.push(pubkey);
+            renderAtlDropdown();
+            renderListFilterDD();
+          } catch (err) {
+            alert(err.message || 'Failed to update list.');
+          }
+        });
+        itemsEl.appendChild(btn);
+      });
+    }
 
-      const key = 'nostrflux_profile_list_v1';
-      let list = [];
-      try {
-        const raw = localStorage.getItem(key);
-        list = raw ? JSON.parse(raw) : [];
-      } catch (_) {
-        list = [];
-      }
-
-      const set = new Set(Array.isArray(list) ? list : []);
-      set.add(pubkey);
-      try {
-        localStorage.setItem(key, JSON.stringify(Array.from(set)));
-      } catch (_) {
-        // ignore
-      }
-
-      const btn = qs('#profileAddToListBtn');
-      if (btn) {
-        btn.textContent = 'Saved';
-        setTimeout(() => { btn.textContent = 'Add to List'; }, 1200);
+    window.toggleAtlDropdown = function (e) {
+      if (e) e.stopPropagation();
+      const dd = qs('#atlDropdown');
+      if (!dd) return;
+      if (dd.classList.contains('open')) {
+        dd.classList.remove('open');
+      } else {
+        renderAtlDropdown();
+        dd.classList.add('open');
+        // Hide create row when reopening
+        const nr = qs('#atlNewRow');
+        if (nr) nr.style.display = 'none';
       }
     };
+
+    window.atlShowCreateRow = function () {
+      const nr = qs('#atlNewRow');
+      if (nr) { nr.style.display = 'flex'; qs('#atlNewInput') && qs('#atlNewInput').focus(); }
+    };
+
+    window.atlCreateList = async function () {
+      const inp = qs('#atlNewInput');
+      const name = inp ? inp.value.trim() : '';
+      if (!name) return;
+      if (!state.user) { window.openLogin(); return; }
+
+      const d = `list-${Date.now()}`;
+      const pubkey = state.selectedProfilePubkey;
+      const tags = [['d', d], ['name', name]];
+      if (pubkey) tags.push(['p', pubkey]);
+
+      try {
+        const signed = await signAndPublish(30000, '', tags);
+        const list = { id: `30000:${state.user.pubkey}:${d}`, name, pubkeys: pubkey ? [pubkey] : [], kind: 30000, d, pubkey: state.user.pubkey };
+        state.nip51Lists.set(list.id, list);
+        if (inp) inp.value = '';
+        const nr = qs('#atlNewRow');
+        if (nr) nr.style.display = 'none';
+        renderAtlDropdown();
+        renderListFilterDD();
+      } catch (err) {
+        alert(err.message || 'Failed to create list.');
+      }
+    };
+
+    // Close ATL dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const wrap = qs('#atlWrap');
+      const dd = qs('#atlDropdown');
+      if (dd && dd.classList.contains('open') && wrap && !wrap.contains(e.target)) {
+        dd.classList.remove('open');
+      }
+    });
+
+    window.addProfileToList = window.toggleAtlDropdown;
 
     window.shareProfile = async function () {
       const pubkey = state.selectedProfilePubkey;
@@ -3990,6 +4211,65 @@
           if (btn) { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = o; }, 1500); }
         }
       } catch (_) {}
+    };
+
+    // ---- Badge popup ----
+    window.openBadgePopup = function ({ name, desc, image, definition, award }) {
+      const ov = qs('#badgePopupOv');
+      if (!ov) return;
+
+      const imgWrap = qs('#badgePopupImgWrap');
+      const nameEl = qs('#badgePopupName');
+      const descEl = qs('#badgePopupDesc');
+      const metaEl = qs('#badgePopupMeta');
+
+      if (nameEl) nameEl.textContent = name || 'Badge';
+      if (descEl) descEl.textContent = desc || '';
+
+      if (imgWrap) {
+        imgWrap.innerHTML = '';
+        if (image && isLikelyUrl(image)) {
+          const img = document.createElement('img');
+          img.src = image;
+          img.alt = name || 'Badge';
+          img.onerror = () => { imgWrap.textContent = '🏅'; };
+          imgWrap.appendChild(img);
+        } else {
+          imgWrap.textContent = '🏅';
+        }
+      }
+
+      if (metaEl) {
+        metaEl.innerHTML = '';
+        const rows = [];
+        if (definition) {
+          const creator = getBadgeDefTag(definition, 'issuer') || shortHex(definition.pubkey);
+          rows.push({ lbl: 'Issued by', val: creator });
+          const d = getBadgeDefTag(definition, 'd');
+          if (d) rows.push({ lbl: 'Badge ID', val: d });
+          if (definition.created_at) {
+            rows.push({ lbl: 'Created', val: new Date(definition.created_at * 1000).toLocaleDateString() });
+          }
+        }
+        if (award && award.created_at) {
+          rows.push({ lbl: 'Awarded', val: new Date(award.created_at * 1000).toLocaleDateString() });
+        }
+        rows.forEach(({ lbl, val }) => {
+          const row = document.createElement('div');
+          row.className = 'badge-popup-meta-row';
+          row.innerHTML = `<span class="badge-popup-meta-lbl">${lbl}</span><span class="badge-popup-meta-val"></span>`;
+          qs('.badge-popup-meta-val', row).textContent = val;
+          metaEl.appendChild(row);
+        });
+      }
+
+      ov.classList.add('open');
+    };
+
+    window.closeBadgePopup = function (e) {
+      if (e && e.target !== qs('#badgePopupOv')) return;
+      const ov = qs('#badgePopupOv');
+      if (ov) ov.classList.remove('open');
     };
 
     // ---- Sign out: clear all data, go home ----
