@@ -1,5 +1,5 @@
-# NostrLiveStream
-https://craigthespacebum.github.io/NostrLiveStream/
+# Sifaka Live
+www.Sifaka.Live
 
 NostrLiveStream is an experimental **decentralized livestreaming platform built on Nostr**.
 
