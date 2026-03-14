@@ -397,11 +397,18 @@
     return { url: `https://github.com/${handle}`, label: handle };
   }
 
-  function setProfileVerificationStyle(isVerified) {
+  function setProfileVerificationStyle(mode) {
     const identityBox = qs('#profileIdentityBox');
     const avatar = qs('#profAv');
-    if (identityBox) identityBox.classList.toggle('nip05-verified', !!isVerified);
-    if (avatar) avatar.classList.toggle('nip05-verified', !!isVerified);
+    const nip05Main = qs('#profNip05');
+    const nip05Check = qs('#profNip05Check');
+    const resolved = (mode === true || mode === 'verified')
+      ? 'verified'
+      : (mode === 'invalid' ? 'invalid' : 'none');
+    if (identityBox) identityBox.classList.toggle('nip05-verified', resolved === 'verified');
+    if (avatar) avatar.classList.toggle('nip05-verified', resolved === 'verified');
+    if (nip05Main) nip05Main.classList.toggle('nip05-invalid', resolved === 'invalid');
+    if (nip05Check) nip05Check.classList.toggle('nip05-invalid', resolved === 'invalid');
   }
 
   function setAvatarEl(el, pictureValue, fallbackText) {
@@ -5282,16 +5289,24 @@
 
     if (verifiedNip05) {
       if (nip05Main) { nip05Main.style.display = 'flex'; nip05Main.textContent = `NIP-05: ${verifiedNip05}`; }
-      if (nip05Check) nip05Check.style.display = 'inline';
+      if (nip05Check) {
+        nip05Check.style.display = 'inline';
+        nip05Check.textContent = '\u2713';
+        nip05Check.title = 'NIP-05 verified';
+      }
     } else if (claimedNip05) {
       if (nip05Main) { nip05Main.style.display = 'flex'; nip05Main.textContent = `Claimed NIP-05: ${claimedNip05}`; }
-      if (nip05Check) nip05Check.style.display = 'none';
+      if (nip05Check) {
+        nip05Check.style.display = 'inline';
+        nip05Check.textContent = '\u2715';
+        nip05Check.title = 'NIP-05 not verified';
+      }
     } else {
       if (nip05Main) nip05Main.style.display = 'none';
       if (nip05Check) nip05Check.style.display = 'none';
     }
     if (npubEl) npubEl.style.display = 'block';
-    setProfileVerificationStyle(!!verifiedNip05);
+    setProfileVerificationStyle(verifiedNip05 ? 'verified' : (claimedNip05 ? 'invalid' : 'none'));
 
     const bio = qs('#profBio');
     const bioText = (p.about || 'No bio yet.').trim() || 'No bio yet.';
@@ -6200,7 +6215,7 @@
       const claimedNip05 = normalizeNip05Value(nip05 || '');
       const verifiedNip05 = normalizedRawPubkey ? getVerifiedNip05ForPubkey(normalizedRawPubkey, claimedNip05) : '';
       if (claimedNip05 && normalizedRawPubkey && !verifiedNip05) ensureNip05Verification(normalizedRawPubkey, claimedNip05).catch(() => {});
-      setProfileVerificationStyle(!!verifiedNip05);
+      setProfileVerificationStyle(verifiedNip05 ? 'verified' : (claimedNip05 ? 'invalid' : 'none'));
 
       const n05 = qs('#profNip05');
       const n05c = qs('#profNip05Check');
@@ -6209,13 +6224,21 @@
           n05.style.display = 'flex';
           n05.textContent = `NIP-05: ${verifiedNip05}`;
         }
-        if (n05c) n05c.style.display = 'inline';
+        if (n05c) {
+          n05c.style.display = 'inline';
+          n05c.textContent = '\u2713';
+          n05c.title = 'NIP-05 verified';
+        }
       } else if (claimedNip05) {
         if (n05) {
           n05.style.display = 'flex';
           n05.textContent = `Claimed NIP-05: ${claimedNip05}`;
         }
-        if (n05c) n05c.style.display = 'none';
+        if (n05c) {
+          n05c.style.display = 'inline';
+          n05c.textContent = '\u2715';
+          n05c.title = 'NIP-05 not verified';
+        }
       } else {
         if (n05) n05.style.display = 'none';
         if (n05c) n05c.style.display = 'none';
@@ -6269,7 +6292,7 @@
         if (postsBtn) postsBtn.style.display = 'none';
         if (state.profileTab === 'posts') state.profileTab = 'streams';
         renderProfileFollowButton('');
-        setProfileVerificationStyle(!!verifiedNip05);
+        setProfileVerificationStyle(verifiedNip05 ? 'verified' : (claimedNip05 ? 'invalid' : 'none'));
 
         const websiteRow = qs('#profWebsiteRow');
         const lud16Row = qs('#profLud16Row');
