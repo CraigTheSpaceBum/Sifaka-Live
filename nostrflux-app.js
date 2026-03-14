@@ -22,6 +22,8 @@
   const HLS_JS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
   const SETTINGS_STORAGE_KEY = 'nostrflux_settings_v1';
   const FOLLOWING_STORAGE_KEY = 'nostrflux_following_pubkeys_v1';
+  const HIDDEN_ENDED_STREAMS_STORAGE_KEY = 'nostrflux_hidden_ended_streams_v1';
+  const NIP05_LOOKUP_CACHE_TTL_MS = 1000 * 60 * 30;
 
   const DEFAULT_SETTINGS = {
     relays: [...DEFAULT_RELAYS],
@@ -99,6 +101,10 @@
     likedStreamAddresses: new Set(),  // tracks which streams the user has liked
     streamLikeEventIdByAddress: new Map(),
     streamLikePublishPending: false,
+    boostedStreamAddresses: new Set(),
+    streamBoostEventIdByAddress: new Map(),
+    streamBoostCheckedByAddress: new Set(),
+    streamBoostCheckPendingByAddress: new Set(),
     streamReactionPubkeysByKey: new Map(),
     streamReactionMetaByKey: new Map(),
     streamReactionIdByKeyAndPubkey: new Map(),
@@ -117,6 +123,11 @@
     shareModalStreamAddress: '',
     activeViewerAddress: '',
     activeHeroViewerAddress: '',
+    goLiveSelectedAddress: '',
+    goLiveHiddenEndedAddresses: new Set(),
+    nip05VerificationByPubkey: new Map(),   // pubkey -> { nip05, verified, checkedAt }
+    nip05VerificationPendingByPubkey: new Set(),
+    nip05LookupCacheByNip05: new Map(),     // nip05 -> { pubkey, checkedAt }
     pendingRouteAddress: '',
     pendingRouteNaddr: ''
   };
@@ -346,8 +357,22 @@
     throw new Error('Unsupported secret key format');
   }
 
+  function sanitizeMediaUrl(v) {
+    const raw = String(v || '').trim();
+    if (!raw) return '';
+    const unwrapped = raw.replace(/^['"]+|['"]+$/g, '');
+    return unwrapped
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .trim();
+  }
+
   function isLikelyUrl(v) {
-    return typeof v === 'string' && /^https?:\/\//i.test(v.trim());
+    const clean = sanitizeMediaUrl(v);
+    return !!clean && /^https?:\/\//i.test(clean);
   }
 
   function normalizeTwitterLink(value) {
@@ -381,7 +406,7 @@
 
   function setAvatarEl(el, pictureValue, fallbackText) {
     if (!el) return;
-    const raw = (pictureValue || '').trim();
+    const raw = sanitizeMediaUrl(pictureValue);
     el.innerHTML = '';
 
     if (isLikelyUrl(raw)) {
@@ -457,6 +482,45 @@
   function persistFollowedPubkeys() {
     try {
       localStorage.setItem(FOLLOWING_STORAGE_KEY, JSON.stringify(Array.from(state.followedPubkeys)));
+    } catch (_) {
+      // no-op
+    }
+  }
+
+  function readHiddenEndedStreamsStore() {
+    try {
+      const raw = localStorage.getItem(HIDDEN_ENDED_STREAMS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function loadHiddenEndedStreamsForPubkey(pubkey) {
+    const key = normalizePubkeyHex(pubkey);
+    if (!key) return new Set();
+    const store = readHiddenEndedStreamsStore();
+    const list = Array.isArray(store[key]) ? store[key] : [];
+    return new Set(
+      list
+        .map((v) => String(v || '').trim())
+        .filter((v) => /^[0-9]+:[0-9a-f]{64}:.+/i.test(v))
+    );
+  }
+
+  function persistHiddenEndedStreamsForCurrentUser() {
+    const own = state.user ? normalizePubkeyHex(state.user.pubkey) : '';
+    if (!own) return;
+    const store = readHiddenEndedStreamsStore();
+    const values = Array.from(state.goLiveHiddenEndedAddresses)
+      .map((v) => String(v || '').trim())
+      .filter((v) => /^[0-9]+:[0-9a-f]{64}:.+/i.test(v))
+      .slice(-300);
+    if (values.length) store[own] = values;
+    else delete store[own];
+    try {
+      localStorage.setItem(HIDDEN_ENDED_STREAMS_STORAGE_KEY, JSON.stringify(store));
     } catch (_) {
       // no-op
     }
@@ -552,7 +616,7 @@
     state.settings.relays.forEach((relay) => {
       const tag = document.createElement('div');
       tag.className = 'relay-tag';
-      tag.innerHTML = `${relay} <button class="rem" title="Remove">âœ•</button>`;
+      tag.innerHTML = `${relay} <button class="rem" title="Remove">×</button>`;
       const btn = qs('.rem', tag);
       if (btn) btn.addEventListener('click', () => removeRelayFromSettings(relay));
       wrap.appendChild(tag);
@@ -782,8 +846,8 @@
     const starts = Number(firstTag(tagMap, 'starts') || 0) || null;
     const title = firstTag(tagMap, 'title') || (ev.content || '').slice(0, 90) || 'Untitled stream';
     const summary = firstTag(tagMap, 'summary') || ev.content || '';
-    const image = firstTag(tagMap, 'image') || firstTag(tagMap, 'thumb') || '';
-    const streaming = firstTag(tagMap, 'streaming') || firstTag(tagMap, 'url') || '';
+    const image = sanitizeMediaUrl(firstTag(tagMap, 'image') || firstTag(tagMap, 'thumb') || '');
+    const streaming = sanitizeMediaUrl(firstTag(tagMap, 'streaming') || firstTag(tagMap, 'url') || '');
     const participants = Number(firstTag(tagMap, 'current_participants') || 0) || 0;
 
     // NIP-53: platforms (zap.stream, shosho, etc.) publish under their own key
@@ -861,6 +925,113 @@
     return `${localPart}@${domain}`;
   }
 
+  function nip05EntryForPubkey(pubkey, nip05Value) {
+    const key = normalizePubkeyHex(pubkey);
+    const nip05 = normalizeNip05Value(nip05Value);
+    if (!key || !nip05) return null;
+    const row = state.nip05VerificationByPubkey.get(key);
+    if (!row || row.nip05 !== nip05) return null;
+    return row;
+  }
+
+  function getVerifiedNip05ForPubkey(pubkey, nip05Value) {
+    const nip05 = normalizeNip05Value(nip05Value);
+    const row = nip05EntryForPubkey(pubkey, nip05);
+    return row && row.verified ? nip05 : '';
+  }
+
+  function refreshNip05DependentUi(pubkey) {
+    const normalized = normalizePubkeyHex(pubkey);
+    if (!normalized) return;
+    renderLiveGrid();
+
+    const selected = state.selectedStreamAddress && state.streamsByAddress.get(state.selectedStreamAddress);
+    if (selected) {
+      const isRelated = [selected.pubkey, selected.hostPubkey, selected.platformPubkey]
+        .map((v) => normalizePubkeyHex(v))
+        .includes(normalized);
+      if (isRelated) renderVideo(selected);
+    }
+
+    if (state.user && normalizePubkeyHex(state.user.pubkey) === normalized) {
+      setUserUi();
+    }
+
+    if (normalizePubkeyHex(state.selectedProfilePubkey) === normalized) {
+      renderProfilePage(normalized);
+      syncProfileRoute(normalized, 'replace');
+    }
+
+    const chatEl = qs('#chatScroll');
+    if (chatEl) {
+      const verified = !!getVerifiedNip05ForPubkey(normalized, profileFor(normalized).nip05 || '');
+      const escaped = (window.CSS && typeof window.CSS.escape === 'function')
+        ? window.CSS.escape(normalized)
+        : normalized.replace(/["\\]/g, '');
+      chatEl.querySelectorAll(`.cmsg[data-pubkey="${escaped}"] .c-av`).forEach((el) => {
+        el.classList.toggle('nip05-square', verified);
+      });
+    }
+  }
+
+  async function fetchNip05PubkeyFromWellKnown(nip05Input, opts = {}) {
+    const normalized = normalizeNip05Value(nip05Input);
+    if (!normalized) return '';
+    const now = Date.now();
+    const cached = state.nip05LookupCacheByNip05.get(normalized);
+    const maxAge = Number(opts.maxAgeMs || NIP05_LOOKUP_CACHE_TTL_MS);
+    if (!opts.force && cached && (now - Number(cached.checkedAt || 0)) < maxAge) {
+      return normalizePubkeyHex(cached.pubkey || '');
+    }
+
+    const [localPart, domain] = normalized.split('@');
+    let resolved = '';
+    try {
+      const resp = await fetch(`https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`, { cache: 'no-store' });
+      if (resp.ok) {
+        const data = await resp.json();
+        const names = data && data.names && typeof data.names === 'object' ? data.names : {};
+        resolved = normalizePubkeyHex(names[localPart] || names[localPart.toLowerCase()] || '');
+      }
+    } catch (_) {
+      resolved = '';
+    }
+
+    state.nip05LookupCacheByNip05.set(normalized, { pubkey: resolved, checkedAt: now });
+    return resolved;
+  }
+
+  async function ensureNip05Verification(pubkey, nip05Input, opts = {}) {
+    const key = normalizePubkeyHex(pubkey);
+    const nip05 = normalizeNip05Value(nip05Input);
+    if (!key) return false;
+    if (!nip05) {
+      const prev = state.nip05VerificationByPubkey.get(key);
+      state.nip05VerificationByPubkey.delete(key);
+      if (prev) refreshNip05DependentUi(key);
+      return false;
+    }
+
+    const existing = nip05EntryForPubkey(key, nip05);
+    const maxAge = Number(opts.maxAgeMs || NIP05_LOOKUP_CACHE_TTL_MS);
+    const existingFresh = existing && (Date.now() - Number(existing.checkedAt || 0)) < maxAge;
+    if (!opts.force && existingFresh) return !!existing.verified;
+    if (state.nip05VerificationPendingByPubkey.has(key)) return !!(existing && existing.verified);
+
+    state.nip05VerificationPendingByPubkey.add(key);
+    try {
+      const resolved = await fetchNip05PubkeyFromWellKnown(nip05, opts);
+      const verified = !!resolved && resolved === key;
+      const prev = state.nip05VerificationByPubkey.get(key);
+      const changed = !prev || prev.nip05 !== nip05 || !!prev.verified !== verified;
+      state.nip05VerificationByPubkey.set(key, { nip05, verified, checkedAt: Date.now() });
+      if (changed) refreshNip05DependentUi(key);
+      return verified;
+    } finally {
+      state.nip05VerificationPendingByPubkey.delete(key);
+    }
+  }
+
   function extractProfileTokenFromPath(pathname) {
     const parts = pathParts(pathname);
     if (!parts.length) return '';
@@ -924,23 +1095,15 @@
   async function resolveNip05ToPubkey(nip05) {
     const normalized = normalizeNip05Value(nip05);
     if (!normalized) return '';
+    const resolved = await fetchNip05PubkeyFromWellKnown(normalized);
+    if (!resolved) return '';
 
-    const cached = Array.from(state.profilesByPubkey.values()).find(
-      (p) => normalizeNip05Value(p.nip05) === normalized
-    );
-    if (cached && cached.pubkey) return cached.pubkey.toLowerCase();
-
-    const [localPart, domain] = normalized.split('@');
-    try {
-      const resp = await fetch(`https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`);
-      if (!resp.ok) return '';
-      const data = await resp.json();
-      const names = data && data.names ? data.names : {};
-      const candidate = names[localPart] || names[localPart.toLowerCase()];
-      return /^[0-9a-f]{64}$/i.test(candidate || '') ? candidate.toLowerCase() : '';
-    } catch (_) {
-      return '';
+    const existing = profileFor(resolved);
+    const existingNip05 = normalizeNip05Value(existing.nip05 || '');
+    if (existingNip05 === normalized) {
+      state.nip05VerificationByPubkey.set(resolved, { nip05: normalized, verified: true, checkedAt: Date.now() });
     }
+    return resolved;
   }
 
   async function resolveProfileTokenToPubkey(token) {
@@ -1006,8 +1169,9 @@
     };
 
     const profile = profileFor(pubkey);
-    const nip05 = normalizeNip05Value(profile.nip05 || '');
+    const nip05 = getVerifiedNip05ForPubkey(pubkey, profile.nip05 || '');
     if (nip05 && applyRoute(`/${nip05}`)) return;
+    if (!nip05) ensureNip05Verification(pubkey, profile.nip05 || '').catch(() => {});
 
     const applyNpub = () => {
       if (!window.NostrTools || !window.NostrTools.nip19 || typeof window.NostrTools.nip19.npubEncode !== 'function') {
@@ -1024,7 +1188,7 @@
     if (applyNpub()) return;
     ensureNostrTools().then(() => {
       const latest = profileFor(pubkey);
-      const latestNip05 = normalizeNip05Value(latest.nip05 || '');
+      const latestNip05 = getVerifiedNip05ForPubkey(pubkey, latest.nip05 || '');
       if (latestNip05) {
         applyRoute(`/${latestNip05}`);
         return;
@@ -1103,7 +1267,7 @@
       picture: obj.picture || '',
       banner: obj.banner || '',
       website: obj.website || '',
-      nip05: obj.nip05 || '',
+      nip05: normalizeNip05Value(obj.nip05 || ''),
       lud16: obj.lud16 || '',
       twitter: obj.twitter || obj.x || '',
       github: obj.github || ''
@@ -1172,6 +1336,154 @@
     if (!existing || existing.created_at <= stream.created_at) {
       state.streamsByAddress.set(stream.address, stream);
     }
+    if (state.selectedStreamAddress === stream.address) {
+      const selected = state.streamsByAddress.get(stream.address) || stream;
+      const status = normalizeStreamStatus(selected.status);
+      const ownPubkey = state.user ? normalizePubkeyHex(state.user.pubkey) : '';
+      const streamPubkey = normalizePubkeyHex(selected.pubkey);
+      const isOwnStream = !!ownPubkey && ownPubkey === streamPubkey;
+      const videoPage = qs('#videoPage');
+      const isWatchingSelected = state.activeViewerAddress === selected.address
+        || !!(videoPage && videoPage.style.display !== 'none');
+
+      if (status === 'ended' && !isOwnStream && isWatchingSelected) {
+        setActiveViewerAddress('');
+        if (window.showPage) window.showPage('home');
+      } else if (isWatchingSelected || isOwnStream) {
+        renderVideo(selected);
+      }
+    }
+    updateGoLiveButtonState();
+  }
+
+  function normalizeStreamStatus(status) {
+    const raw = String(status || '').toLowerCase();
+    if (raw.includes('ended')) return 'ended';
+    if (raw.includes('planned')) return 'planned';
+    return 'live';
+  }
+
+  function ownManageableStreams() {
+    if (!state.user) return [];
+    const own = normalizePubkeyHex(state.user.pubkey);
+    if (!own) return [];
+    return Array.from(state.streamsByAddress.values())
+      .filter((s) => normalizePubkeyHex(s.pubkey) === own)
+      .filter((s) => !state.goLiveHiddenEndedAddresses.has(s.address))
+      .sort((a, b) => {
+        const rank = (stream) => {
+          const st = normalizeStreamStatus(stream.status);
+          if (st === 'live') return 0;
+          if (st === 'planned') return 1;
+          return 2;
+        };
+        const r = rank(a) - rank(b);
+        if (r) return r;
+        return (b.created_at || 0) - (a.created_at || 0);
+      });
+  }
+
+  function setGoLiveStatusSelection(statusValue) {
+    const normalized = normalizeStreamStatus(statusValue);
+    const row = qs('.srow');
+    if (!row) return;
+    const buttons = qsa('.sc', row);
+    buttons.forEach((btn) => btn.classList.remove('sl'));
+    const target = buttons.find((btn) => normalizeStreamStatus(btn.textContent) === normalized) || buttons[0];
+    if (target) target.classList.add('sl');
+  }
+
+  function populateGoLiveFormFromStream(stream) {
+    const dTagInput = qs('#goLiveDTag');
+    const titleInput = qs('#goLiveTitle');
+    const summaryInput = qs('#goLiveSummary');
+    const streamUrlInput = qs('#goLiveStreamUrl');
+    const thumbInput = qs('#goLiveThumb');
+    const startsInput = qs('#goLiveStarts');
+    const eventIdInput = qs('#goLiveEventId');
+
+    if (dTagInput) dTagInput.value = stream ? (stream.d || '') : '';
+    if (titleInput) titleInput.value = stream ? (stream.title || '') : '';
+    if (summaryInput) summaryInput.value = stream ? (stream.summary || '') : '';
+    if (streamUrlInput) streamUrlInput.value = stream ? (stream.streaming || '') : '';
+    if (thumbInput) thumbInput.value = stream ? (stream.image || '') : '';
+    if (startsInput) startsInput.value = stream && stream.starts ? fromUnixSeconds(stream.starts) : '';
+    if (eventIdInput) eventIdInput.value = stream && stream.id ? stream.id : '';
+    setGoLiveStatusSelection(stream ? stream.status : 'live');
+  }
+
+  function resetGoLiveFormDefaults() {
+    populateGoLiveFormFromStream(null);
+    const dtag = qs('#goLiveDTag');
+    if (dtag && !dtag.value.trim()) dtag.value = `stream-${Date.now()}`;
+    const starts = qs('#goLiveStarts');
+    if (starts && !starts.value) starts.value = fromUnixSeconds(Math.floor(Date.now() / 1000));
+    const title = qs('#goLiveTitle');
+    if (title && !title.value.trim()) title.value = 'Untitled stream';
+  }
+
+  function updateGoLiveModalState() {
+    const manageWrap = qs('#goLiveManageWrap');
+    const manageHint = qs('#goLiveManageHint');
+    const selector = qs('#goLiveStreamSelect');
+    const publishBtn = qs('#goLivePublishBtn');
+    const removeBtn = qs('#goLiveRemoveBtn');
+    const modalTitle = qs('#goLiveModalTitle');
+    const modalSub = qs('#goLiveModalSub');
+
+    const streams = ownManageableStreams();
+    let selected = streams.find((s) => s.address === state.goLiveSelectedAddress) || null;
+    if (!selected && streams.length) selected = streams[0];
+    state.goLiveSelectedAddress = selected ? selected.address : '';
+
+    if (manageWrap) manageWrap.classList.toggle('on', streams.length > 0);
+    if (selector) {
+      selector.innerHTML = '';
+      streams.forEach((stream) => {
+        const opt = document.createElement('option');
+        const statusLabel = normalizeStreamStatus(stream.status).toUpperCase();
+        const title = (stream.title || 'Untitled stream').slice(0, 64);
+        opt.value = stream.address;
+        opt.textContent = `${statusLabel} - ${title}`;
+        selector.appendChild(opt);
+      });
+      if (state.goLiveSelectedAddress) selector.value = state.goLiveSelectedAddress;
+    }
+
+    if (selected) {
+      populateGoLiveFormFromStream(selected);
+      const status = normalizeStreamStatus(selected.status);
+      if (modalTitle) modalTitle.innerHTML = '<span class="mi"></span>Edit Stream';
+      if (modalSub) modalSub.textContent = 'You already have stream events. Edit details and publish updates.';
+      if (publishBtn) publishBtn.textContent = status === 'live' ? 'Save Live Update' : 'Save Stream Update';
+      if (removeBtn) removeBtn.style.display = status === 'ended' ? 'inline-flex' : 'none';
+      if (manageHint) manageHint.textContent = streams.length > 1
+        ? 'Pick a stream from the list to edit or end it.'
+        : 'You can edit title, stream id, URL, summary, and status.';
+    } else {
+      resetGoLiveFormDefaults();
+      if (modalTitle) modalTitle.innerHTML = '<span class="mi"></span>Publish Your Stream';
+      if (modalSub) modalSub.innerHTML = 'Broadcasts a <span style="color:var(--purple);font-family:\'DM Mono\',monospace">kind:30311</span> NIP-53 event to your relays.';
+      if (publishBtn) publishBtn.textContent = 'Go Live Now';
+      if (removeBtn) removeBtn.style.display = 'none';
+      if (manageHint) manageHint.textContent = 'Create your first stream event, then it will appear here for editing.';
+    }
+  }
+
+  function updateGoLiveButtonState() {
+    const btn = qs('#goLiveBtn');
+    if (!btn) return;
+    const streams = ownManageableStreams();
+    const hasLive = streams.some((s) => normalizeStreamStatus(s.status) === 'live');
+    if (hasLive) {
+      btn.textContent = 'Edit Stream';
+      btn.classList.remove('btn-ghost');
+      btn.classList.add('btn-live-pulse', 'btn-edit-stream-live');
+      return;
+    }
+    btn.textContent = 'Go Live';
+    btn.classList.remove('btn-live-pulse', 'btn-edit-stream-live');
+    btn.classList.add('btn-ghost');
   }
 
   function effectiveParticipants(stream) {
@@ -1628,7 +1940,9 @@
     const avEl = qs('.ci-av', card);
     if (avEl) {
       setAvatarEl(avEl, p.picture || '', pickAvatar(stream.hostPubkey));
-      if (p.nip05) avEl.classList.add('nip05-square');
+      const verifiedNip05 = getVerifiedNip05ForPubkey(stream.hostPubkey, p.nip05 || '');
+      if (verifiedNip05) avEl.classList.add('nip05-square');
+      else if (normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(stream.hostPubkey, p.nip05 || '').catch(() => {});
     }
     qs('.ci-title', card).textContent = stream.title;
     qs('.ci-host', card).textContent = p.display_name || p.name || shortHex(stream.hostPubkey);
@@ -1691,7 +2005,7 @@
           if (sv) return `"${sv.name}"`;
           return 'this filter';
         })();
-      grid.innerHTML = `<div class="following-empty" style="grid-column:1/-1"><div class="following-empty-icon">ðŸ“¡</div><div class="following-empty-title">No live streams in ${filterName}</div><div class="following-empty-sub">Nobody in this list is streaming right now.</div></div>`;
+      grid.innerHTML = `<div class="following-empty" style="grid-column:1/-1"><div class="following-empty-icon">📡</div><div class="following-empty-title">No live streams in ${filterName}</div><div class="following-empty-sub">Nobody in this list is streaming right now.</div></div>`;
       return;
     }
 
@@ -1849,12 +2163,13 @@
     const ovEl = qs('#heroPlayOv');
     if (!playerEl || !bgEl) return;
 
-    const url = (stream.streaming || '').trim();
-    const image = (stream.image || '').trim();
+    const url = sanitizeMediaUrl(stream.streaming || '');
+    const image = sanitizeMediaUrl(stream.image || '');
 
     // Set background: thumbnail or gradient
     if (image) {
-      bgEl.style.cssText = `width:100%;height:100%;background:url(${JSON.stringify(image)}) center/cover no-repeat,linear-gradient(135deg,#0d1e30,#1a0a00);`;
+      const safeImage = image.replace(/"/g, '\\"');
+      bgEl.style.cssText = `width:100%;height:100%;background:url("${safeImage}") center/cover no-repeat,linear-gradient(135deg,#0d1e30,#1a0a00);`;
     } else {
       bgEl.style.cssText = 'width:100%;height:100%;background:linear-gradient(135deg,#0d1e30,#1a0a00,#080d18);';
     }
@@ -1951,14 +2266,16 @@
     set('heroSummary', stream.summary || 'Live stream on Nostr.');
     set('heroHostName', p.name);
     set('heroStatusLabel', (stream.status || 'live').toUpperCase());
-    set('heroViewers', viewerCount > 0 ? viewerCount.toLocaleString() : 'â€”');
-    set('heroSats', 'â€”');
+    set('heroViewers', viewerCount > 0 ? viewerCount.toLocaleString() : '-');
+    set('heroSats', '-');
     set('heroTime', stream.starts ? new Date(stream.starts * 1000).toUTCString().slice(17, 22) + ' UTC' : 'live');
 
     const avEl = qs('#heroAv');
     if (avEl) setAvatarEl(avEl, p.picture || '', pickAvatar(stream.hostPubkey));
     const nip05El = qs('#heroNip05');
-    if (nip05El) { nip05El.style.display = p.nip05 ? 'inline' : 'none'; if (p.nip05) nip05El.title = p.nip05; }
+    const heroNip05 = getVerifiedNip05ForPubkey(stream.hostPubkey, p.nip05 || '');
+    if (!heroNip05 && normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(stream.hostPubkey, p.nip05 || '').catch(() => {});
+    if (nip05El) { nip05El.style.display = heroNip05 ? 'inline' : 'none'; if (heroNip05) nip05El.title = heroNip05; }
 
     // Wire click to open stream
     const heroEl = qs('#heroStream');
@@ -2074,6 +2391,12 @@
     const playerBg = qs('.player-bg');
     const playerUi = qs('.player-ui');
     if (!playerBg) return;
+    if (normalizeStreamStatus(stream.status) === 'ended') {
+      const endedSummary = String(stream.summary || '').trim();
+      const message = endedSummary ? `Stream ended. ${endedSummary}` : 'Stream ended.';
+      renderPlaybackFallback(message, stream.streaming || '');
+      return;
+    }
 
     const url = (stream.streaming || '').trim();
     if (!url) {
@@ -2194,20 +2517,22 @@
 
     // Host name + nip05
     const name = qs('.sib-name');
+    const verifiedNip05 = getVerifiedNip05ForPubkey(stream.hostPubkey, p.nip05 || '');
+    if (!verifiedNip05 && normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(stream.hostPubkey, p.nip05 || '').catch(() => {});
     if (name) {
       name.innerHTML = '';
       name.textContent = p.name || shortHex(stream.hostPubkey);
-      if (p.nip05) {
+      if (verifiedNip05) {
         const badge = document.createElement('span');
         badge.className = 'nip05-badge';
-        badge.title = `NIP-05: ${p.nip05}`;
+        badge.title = `NIP-05: ${verifiedNip05}`;
         badge.textContent = '\u2713';
         name.appendChild(document.createTextNode(' '));
         name.appendChild(badge);
       }
     }
     const ident = qs('.sib-identity');
-    if (ident) ident.textContent = p.nip05 || shortHex(stream.hostPubkey);
+    if (ident) ident.textContent = verifiedNip05 || shortHex(stream.hostPubkey);
 
     // Hosted-by box: inline in .sib-host-row to the right of .sib-host-info
     let sibHostedBy = qs('.sib-hosted-by');
@@ -2245,14 +2570,14 @@
     const satsEl = qs('#theaterSats');
     if (satsEl) {
       const zapTotal = state.streamZapTotals && state.streamZapTotals.get(stream.address);
-      satsEl.textContent = zapTotal != null ? formatCount(zapTotal) : 'â€”';
+      satsEl.textContent = zapTotal != null ? formatCount(zapTotal) : '-';
     }
 
     // Followers â€” fetch from profileStats if already loaded
     const followersEl = qs('#theaterFollowers');
     if (followersEl) {
       const stats = state.profileStatsByPubkey && state.profileStatsByPubkey.get(stream.pubkey);
-      followersEl.textContent = stats ? formatCount(stats.followers || 0) : 'â€”';
+      followersEl.textContent = stats ? formatCount(stats.followers || 0) : '-';
     }
 
     // Runtime counter â€” ticks every second from stream.starts
@@ -2261,7 +2586,7 @@
     if (runtimeEl) {
       const updateRuntime = () => {
         const startTs = stream.starts || stream.created_at;
-        if (!startTs) { runtimeEl.textContent = 'â€”'; return; }
+        if (!startTs) { runtimeEl.textContent = '-'; return; }
         const secs = Math.max(0, Math.floor(Date.now() / 1000) - startTs);
         const h = Math.floor(secs / 3600);
         const m = Math.floor((secs % 3600) / 60);
@@ -2274,14 +2599,16 @@
       state._theaterRuntimeInterval = setInterval(updateRuntime, 1000);
     }
 
-    // Like button â€” reflect per-stream like state
+    // Reactions row state
     const likeBtn = qs('#likeBtn');
     const isLiked = state.likedStreamAddresses.has(stream.address);
     if (likeBtn) likeBtn.classList.toggle('liked', isLiked);
     renderStreamReactionsUi(stream);
 
-    // Follow button â€” reflect current follow state
+    // Follow/share button state
     updateTheaterFollowBtn(stream.hostPubkey);
+    updateTheaterShareBtn(stream);
+    refreshOwnStreamBoostState(stream);
 
     renderVideoPlayback(stream);
 
@@ -2297,8 +2624,106 @@
     const btn = qs('#theaterFollowBtn');
     if (!btn) return;
     const isFollowing = isFollowingPubkey(pubkey);
-    btn.textContent = isFollowing ? 'âœ“ Unfollow' : 'Follow';
+    btn.textContent = isFollowing ? 'Unfollow' : 'Follow';
     btn.classList.toggle('following-active', isFollowing);
+  }
+
+  function updateTheaterShareBtn(stream) {
+    const btn = qs('#theaterShareBtn');
+    if (!btn) return;
+    const boosted = !!(state.user && stream && state.boostedStreamAddresses.has(stream.address));
+    btn.classList.toggle('boosted', boosted);
+  }
+
+  async function findOwnStreamBoostEventId(stream) {
+    if (!state.user || !stream || !state.pool) return '';
+    const own = normalizePubkeyHex(state.user.pubkey);
+    if (!own || !stream.id || !stream.address) return '';
+
+    return new Promise((resolve) => {
+      const reposts = new Map();
+      const deletedIds = new Set();
+      let done = false;
+      let subId = null;
+
+      const finish = (id = '') => {
+        if (done) return;
+        done = true;
+        if (subId) {
+          try { state.pool.unsubscribe(subId); } catch (_) {}
+        }
+        resolve(id || '');
+      };
+
+      const timeout = setTimeout(() => finish(''), 1800);
+      const safeFinish = (id = '') => {
+        clearTimeout(timeout);
+        finish(id);
+      };
+
+      subId = state.pool.subscribe(
+        [
+          { kinds: [6], authors: [own], '#e': [stream.id], limit: 120, since: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 120 },
+          { kinds: [6], authors: [own], '#a': [stream.address], limit: 120, since: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 120 },
+          { kinds: [KIND_DELETION], authors: [own], limit: 150, since: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 120 }
+        ],
+        {
+          event: (ev) => {
+            if (!ev || !ev.id) return;
+            if (ev.kind === 6) {
+              reposts.set(ev.id, ev);
+              return;
+            }
+            if (ev.kind === KIND_DELETION) {
+              (ev.tags || []).forEach((t) => {
+                if (Array.isArray(t) && t[0] === 'e' && t[1]) deletedIds.add(String(t[1]));
+              });
+            }
+          },
+          eose: () => {
+            const newest = Array.from(reposts.values())
+              .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+              .find((ev) => !deletedIds.has(ev.id));
+            safeFinish(newest ? newest.id : '');
+          }
+        }
+      );
+    });
+  }
+
+  async function refreshOwnStreamBoostState(stream) {
+    if (!stream || !stream.address) return;
+    if (!state.user || !state.pool) {
+      state.boostedStreamAddresses.delete(stream.address);
+      state.streamBoostEventIdByAddress.delete(stream.address);
+      state.streamBoostCheckedByAddress.delete(stream.address);
+      state.streamBoostCheckPendingByAddress.delete(stream.address);
+      updateTheaterShareBtn(stream);
+      return;
+    }
+
+    if (state.streamBoostCheckedByAddress.has(stream.address) || state.streamBoostCheckPendingByAddress.has(stream.address)) {
+      updateTheaterShareBtn(stream);
+      return;
+    }
+
+    state.streamBoostCheckPendingByAddress.add(stream.address);
+    try {
+      const boostId = await findOwnStreamBoostEventId(stream);
+      if (boostId) {
+        state.boostedStreamAddresses.add(stream.address);
+        state.streamBoostEventIdByAddress.set(stream.address, boostId);
+      } else {
+        state.boostedStreamAddresses.delete(stream.address);
+        state.streamBoostEventIdByAddress.delete(stream.address);
+      }
+      state.streamBoostCheckedByAddress.add(stream.address);
+      if (state.selectedStreamAddress === stream.address) updateTheaterShareBtn(stream);
+    } catch (_) {
+      // no-op
+    } finally {
+      state.streamBoostCheckPendingByAddress.delete(stream.address);
+    }
   }
 
   // Debounce timer for relay search
@@ -2308,12 +2733,14 @@
   function buildSearchProfileItem(p, box) {
     const item = document.createElement('div');
     item.className = 'sr-item';
-    const hasNip05 = !!(p.nip05 || '').trim();
+    const verifiedNip05 = getVerifiedNip05ForPubkey(p.pubkey, p.nip05 || '');
+    if (!verifiedNip05 && normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(p.pubkey, p.nip05 || '').catch(() => {});
+    const hasNip05 = !!verifiedNip05;
     const avClass = hasNip05 ? 'sr-av nip05-square' : 'sr-av';
     item.innerHTML = `<div class="${avClass}"></div><div><div class="sr-title"></div><div class="sr-sub"></div></div>`;
     setAvatarEl(qs('.sr-av', item), p.picture || '', pickAvatar(p.pubkey));
     qs('.sr-title', item).textContent = p.name;
-    qs('.sr-sub', item).textContent = p.nip05 || shortHex(p.pubkey);
+    qs('.sr-sub', item).textContent = verifiedNip05 || shortHex(p.pubkey);
     item.addEventListener('click', () => {
       showProfileByPubkey(p.pubkey);
       box.classList.remove('open');
@@ -2738,7 +3165,7 @@
     const raw = String(content == null ? '' : content).trim();
     if (!raw) return '+';
     const low = raw.toLowerCase();
-    if (low === '+' || low === 'like' || raw === 'â¤' || raw === 'â¤ï¸') return '+';
+    if (low === '+' || low === 'like' || raw === '❤' || raw === '❤️') return '+';
     if (low === '-') return '-';
     return raw;
   }
@@ -2746,7 +3173,7 @@
   function parseReactionMeta(content, tags) {
     const key = normalizeReactionContentKey(content);
     if (!key || key === '-') return null;
-    if (key === '+') return { key: '+', label: 'â¤', imageUrl: '', shortcode: '' };
+    if (key === '+') return { key: '+', label: '❤', imageUrl: '', shortcode: '' };
 
     let imageUrl = '';
     let shortcode = '';
@@ -2884,13 +3311,13 @@
 
   function renderStreamReactionsUi(stream) {
     const list = qs('#streamEmojiList');
-    const likeCount = qs('#likeCount');
+    const likeCounter = qs('#streamLikeCounter');
     const likeBtn = qs('#likeBtn');
     const current = stream || state.streamsByAddress.get(state.selectedStreamAddress);
 
     if (!current) {
       if (list) list.innerHTML = '';
-      if (likeCount) likeCount.textContent = '0';
+      if (likeCounter) likeCounter.textContent = '0 likes';
       if (likeBtn) likeBtn.classList.remove('liked');
       return;
     }
@@ -2899,7 +3326,7 @@
     const likeSet = state.streamReactionPubkeysByKey.get('+') || new Set();
     const isLiked = !!(own && likeSet.has(own));
     const likeTotal = likeSet.size;
-    if (likeCount) likeCount.textContent = `${likeTotal}`;
+    if (likeCounter) likeCounter.textContent = `${likeTotal} like${likeTotal === 1 ? '' : 's'}`;
     if (likeBtn) likeBtn.classList.toggle('liked', isLiked || state.likedStreamAddresses.has(current.address));
 
     if (own && isLiked) state.likedStreamAddresses.add(current.address);
@@ -3141,7 +3568,7 @@
   function defaultReactionPickerOptions() {
     const out = [];
     const seen = new Set();
-    ['â¤', 'ðŸ”¥', 'ðŸ‘', 'âš¡', 'ðŸ˜‚', 'ðŸ˜®', 'ðŸš€', 'ðŸ¤™'].forEach((val) => {
+    ['❤', '🔥', '👏', '⚡', '😂', '😮', '🚀', '🤙'].forEach((val) => {
       const meta = reactionMetaFromPicker(val, '');
       if (!meta || seen.has(meta.key)) return;
       seen.add(meta.key);
@@ -3248,6 +3675,28 @@
     }
   }
 
+  function renderChatInlineMedia(container, mediaUrls) {
+    if (!container || !Array.isArray(mediaUrls) || !mediaUrls.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-media-wrap';
+    if (mediaUrls.length === 1) wrap.classList.add('single');
+    mediaUrls.slice(0, 4).forEach((url) => {
+      const a = document.createElement('a');
+      a.className = 'chat-media-item' + (mediaUrls.length === 1 ? ' single' : '');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = 'Chat image';
+      img.loading = 'lazy';
+      img.addEventListener('error', () => { a.remove(); });
+      a.appendChild(img);
+      wrap.appendChild(a);
+    });
+    if (wrap.children.length) container.appendChild(wrap);
+  }
+
   function renderChatMessage(ev) {
     const sc = qs('#chatScroll');
     if (!sc) return;
@@ -3257,10 +3706,12 @@
     row.className = 'cmsg';
     row.dataset.pubkey = ev.pubkey;
     row.dataset.msgId = ev.id;
-    row.innerHTML = `<div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name"></span><span class="c-time"></span></div><div class="c-text"></div></div><div class="chat-msg-actions"><button class="cma-btn like-cma chat-like-btn" title="Like">â¤ <span class="chat-like-count">0</span></button></div>`;
+    row.innerHTML = `<div class="c-av"></div><div class="c-body"><div class="c-name-row"><span class="c-name"></span><span class="c-time"></span></div><div class="c-text"></div></div><div class="chat-msg-actions"><button class="cma-btn like-cma chat-like-btn" title="Like">❤ <span class="chat-like-count">0</span></button></div>`;
     const avEl = qs('.c-av', row);
     setAvatarEl(avEl, p.picture || '', pickAvatar(ev.pubkey));
-    if (p.nip05) avEl.classList.add('nip05-square');
+    const chatNip05 = getVerifiedNip05ForPubkey(ev.pubkey, p.nip05 || '');
+    if (chatNip05) avEl.classList.add('nip05-square');
+    else if (normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(ev.pubkey, p.nip05 || '').catch(() => {});
     avEl.onclick = () => showProfileByPubkey(ev.pubkey);
     const nameEl = qs('.c-name', row);
     nameEl.textContent = state.profilesByPubkey.has(ev.pubkey) ? p.name : shortHex(ev.pubkey);
@@ -3271,7 +3722,15 @@
       try { timeEl.title = new Date(Number(ev.created_at || 0) * 1000).toLocaleString(); } catch (_) {}
     }
     const ctext = qs('.c-text', row);
-    ctext.appendChild(renderNostrContent(ev.content || ''));
+    const rawText = String(ev.content || '');
+    const mediaUrls = Array.from(new Set(
+      extractHttpUrls(rawText)
+        .map((u) => sanitizeMediaUrl(u))
+        .filter((u) => classifyMediaUrl(u) === 'photo')
+    ));
+    const renderText = mediaUrls.length ? stripMediaUrlsFromText(rawText, mediaUrls) : rawText;
+    if (renderText) ctext.appendChild(renderNostrContent(renderText));
+    renderChatInlineMedia(ctext, mediaUrls);
     const likeBtn = qs('.chat-like-btn', row);
     if (likeBtn) likeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3294,10 +3753,14 @@
     if (!state.user) {
       setLoggedInUi(false);
       renderFollowingCount();
+      updateGoLiveButtonState();
       return;
     }
     setLoggedInUi(true);
     const p = state.user.profile || { name: shortHex(state.user.pubkey), nip05: '' };
+    const claimedNip05 = normalizeNip05Value(p.nip05 || '');
+    const verifiedNip05 = getVerifiedNip05ForPubkey(state.user.pubkey, claimedNip05);
+    if (claimedNip05 && !verifiedNip05) ensureNip05Verification(state.user.pubkey, claimedNip05).catch(() => {});
     const av = pickAvatar(state.user.pubkey);
     const pic = (p.picture || '').trim();
     const navAvatar = qs('#navAvatar');
@@ -3312,17 +3775,21 @@
     if (pdAv) setAvatarEl(pdAv, pic, av);
     if (navName) navName.textContent = p.name;
     if (pdName) pdName.childNodes[0].textContent = `${p.name} `;
-    if (pdSub) { const base = p.nip05 || shortHex(state.user.pubkey); pdSub.textContent = state.authMode === 'local' ? `${base} (local key)` : base; }
-    if (navBadge) navBadge.style.display = p.nip05 ? 'inline' : 'none';
-    if (pdBadge) pdBadge.style.display = p.nip05 ? 'inline' : 'none';
+    if (pdSub) {
+      const base = verifiedNip05 || (claimedNip05 ? `${claimedNip05} (unverified)` : shortHex(state.user.pubkey));
+      pdSub.textContent = state.authMode === 'local' ? `${base} (local key)` : base;
+    }
+    if (navBadge) navBadge.style.display = verifiedNip05 ? 'inline' : 'none';
+    if (pdBadge) pdBadge.style.display = verifiedNip05 ? 'inline' : 'none';
 
     // Apply NIP-05 square glow to nav/dropdown avatars
-    if (navAvatar) navAvatar.classList.toggle('nip05-square', !!p.nip05);
-    if (pdAv) pdAv.classList.toggle('nip05-square', !!p.nip05);
+    if (navAvatar) navAvatar.classList.toggle('nip05-square', !!verifiedNip05);
+    if (pdAv) pdAv.classList.toggle('nip05-square', !!verifiedNip05);
 
     // Load user's contact list + NIP-51 people lists for the filter dropdown
     subscribeUserLists(state.user.pubkey);
     renderFollowingCount();
+    updateGoLiveButtonState();
   }
 
   function subscribeProfiles(pubkeys) {
@@ -3339,7 +3806,9 @@
       {
         event: (ev) => {
           if (ev.kind !== KIND_PROFILE) return;
-          state.profilesByPubkey.set(ev.pubkey, parseProfile(ev));
+          const parsed = parseProfile(ev);
+          state.profilesByPubkey.set(ev.pubkey, parsed);
+          ensureNip05Verification(ev.pubkey, parsed.nip05 || '').catch(() => {});
           if (state.user && state.user.pubkey === ev.pubkey) {
             state.user.profile = state.profilesByPubkey.get(ev.pubkey);
             setUserUi();
@@ -3367,7 +3836,9 @@
         {
           event: (ev) => {
             if (ev.kind !== KIND_PROFILE || ev.pubkey !== pubkey) return;
-            state.profilesByPubkey.set(pubkey, parseProfile(ev));
+            const parsed = parseProfile(ev);
+            state.profilesByPubkey.set(pubkey, parsed);
+            ensureNip05Verification(pubkey, parsed.nip05 || '').catch(() => {});
           },
           eose: () => { try { state.pool.unsubscribe(sub); } catch (_) {} resolve(); }
         }
@@ -3449,13 +3920,18 @@
             if (profileEv.kind !== KIND_PROFILE) return;
             const p = parseProfile(profileEv);
             state.profilesByPubkey.set(profileEv.pubkey, p);
+            ensureNip05Verification(profileEv.pubkey, p.nip05 || '').catch(() => {});
             // Update all chat rows for this pubkey
             const chatEl = qs('#chatScroll');
             if (!chatEl) return;
             chatEl.querySelectorAll(`.cmsg[data-pubkey="${CSS.escape(profileEv.pubkey)}"]`).forEach((row) => {
               const avEl = row.querySelector('.c-av');
               const nameEl = row.querySelector('.c-name');
-              if (avEl) { setAvatarEl(avEl, p.picture || '', pickAvatar(profileEv.pubkey)); avEl.classList.toggle('nip05-square', !!p.nip05); }
+              if (avEl) {
+                setAvatarEl(avEl, p.picture || '', pickAvatar(profileEv.pubkey));
+                const verified = !!getVerifiedNip05ForPubkey(profileEv.pubkey, p.nip05 || '');
+                avEl.classList.toggle('nip05-square', verified);
+              }
               if (nameEl) nameEl.textContent = p.name || shortHex(profileEv.pubkey);
             });
           },
@@ -3840,7 +4316,7 @@
                     const a = document.createElement('a');
                     a.href = m.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
                     a.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;min-height:80px;color:var(--zap);font-size:.74rem;font-weight:600;text-decoration:none;padding:.75rem;';
-                    a.textContent = 'â–¶ Open HLS stream';
+                    a.textContent = '▶ Open HLS stream';
                     if (v.parentNode) v.parentNode.replaceChild(a, v);
                   }
                 });
@@ -3857,7 +4333,7 @@
           const fallback = document.createElement('a');
           fallback.href = m.url; fallback.target = '_blank'; fallback.rel = 'noopener noreferrer';
           fallback.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;min-height:80px;color:var(--zap);font-size:.74rem;font-weight:600;text-decoration:none;padding:.75rem;';
-          fallback.textContent = 'â–¶ Open Video';
+          fallback.textContent = '▶ Open Video';
           if (v.parentNode) v.parentNode.replaceChild(fallback, v);
         });
         frame.appendChild(v);
@@ -3900,7 +4376,7 @@
 
       const originalProfile = (isRepost && originalPubkey) ? profileFor(originalPubkey) : null;
       const boostBanner = isRepost
-        ? `<div class="pf-boost-banner"><span class="pf-boost-icon">ðŸ”</span><span class="pf-boost-label">${profile.display_name || profile.name || 'User'} boosted</span></div>`
+        ? `<div class="pf-boost-banner"><span class="pf-boost-icon">🔁</span><span class="pf-boost-label">${profile.display_name || profile.name || 'User'} boosted</span></div>`
         : '';
 
       item.innerHTML = `${boostBanner}
@@ -3934,7 +4410,9 @@
 
       const avEl = qs('.profile-feed-av', item);
       setAvatarEl(avEl, displayProfile.picture || '', pickAvatar(displayPubkey));
-      if (avEl && displayProfile.nip05) avEl.classList.add('nip05-square');
+      const displayVerifiedNip05 = getVerifiedNip05ForPubkey(displayPubkey, displayProfile.nip05 || '');
+      if (avEl && displayVerifiedNip05) avEl.classList.add('nip05-square');
+      else if (normalizeNip05Value(displayProfile.nip05 || '')) ensureNip05Verification(displayPubkey, displayProfile.nip05 || '').catch(() => {});
       if (avEl) { avEl.style.cursor = 'pointer'; avEl.onclick = (e) => { e.stopPropagation(); showProfileByPubkey(displayPubkey); }; }
       const nameEl = qs('.profile-feed-name', item);
       if (nameEl) {
@@ -3952,7 +4430,7 @@
           if (nameEl) { nameEl.textContent = fresh.name || shortHex(displayPubkey); nameEl.style.cursor = 'pointer'; }
           if (avEl) {
             setAvatarEl(avEl, fresh.picture || '', pickAvatar(displayPubkey));
-            avEl.classList.toggle('nip05-square', !!fresh.nip05);
+            avEl.classList.toggle('nip05-square', !!getVerifiedNip05ForPubkey(displayPubkey, fresh.nip05 || ''));
           }
         }).catch(() => {});
       }
@@ -4074,7 +4552,9 @@
             </div>`;
           const cAvEl = qs('.profile-comment-av', row);
           setAvatarEl(cAvEl, cp.picture || '', pickAvatar(comment.pubkey));
-          if (cAvEl && cp.nip05) cAvEl.classList.add('nip05-square');
+          const commentVerifiedNip05 = getVerifiedNip05ForPubkey(comment.pubkey, cp.nip05 || '');
+          if (cAvEl && commentVerifiedNip05) cAvEl.classList.add('nip05-square');
+          else if (normalizeNip05Value(cp.nip05 || '')) ensureNip05Verification(comment.pubkey, cp.nip05 || '').catch(() => {});
           if (cAvEl) { cAvEl.style.cursor = 'pointer'; cAvEl.onclick = (e) => { e.stopPropagation(); showProfileByPubkey(comment.pubkey); }; }
           const n = qs('.profile-comment-meta .n', row);
           if (n) {
@@ -4099,7 +4579,7 @@
               if (n) n.textContent = fresh.display_name || fresh.name || shortHex(comment.pubkey);
               if (cAvEl) {
                 setAvatarEl(cAvEl, fresh.picture || '', pickAvatar(comment.pubkey));
-                cAvEl.classList.toggle('nip05-square', !!fresh.nip05);
+                cAvEl.classList.toggle('nip05-square', !!getVerifiedNip05ForPubkey(comment.pubkey, fresh.nip05 || ''));
               }
             }).catch(() => {});
           }
@@ -4219,12 +4699,12 @@
   }
 
   function extractMediaUrlsFromEvent(ev) {
-    const urls = extractHttpUrls(ev && ev.content ? ev.content : '');
+    const urls = extractHttpUrls(ev && ev.content ? ev.content : '').map((u) => sanitizeMediaUrl(u)).filter(Boolean);
     const tags = (ev && Array.isArray(ev.tags)) ? ev.tags : [];
     tags.forEach((tag) => {
       if (!Array.isArray(tag) || tag.length < 2) return;
       const key = String(tag[0] || '').toLowerCase();
-      const value = String(tag[1] || '').trim();
+      const value = sanitizeMediaUrl(tag[1] || '');
       if (!/^https?:\/\//i.test(value)) return;
       if (key === 'url' || key === 'r' || key === 'image' || key === 'thumb' || key === 'streaming') {
         urls.push(value);
@@ -4356,7 +4836,7 @@
         video.addEventListener('error', () => {
           const fb = document.createElement('div');
           fb.className = 'profile-video-fallback';
-          fb.innerHTML = `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--zap)">â–¶ Open Video</a>`;
+      fb.innerHTML = `<a href="${item.url}" target="_blank" rel="noopener noreferrer" style="color:var(--zap)">▶ Open Video</a>`;
           frame.replaceChild(fb, video);
         });
         frame.appendChild(video);
@@ -4486,6 +4966,37 @@
   if (!state.badgeSubId) state.badgeSubId = null;
   if (!state.badgeDefMap) state.badgeDefMap = new Map(); // Map<"pubkey:d", definition event>
 
+  function parseBadgeAddressRef(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const parts = raw.split(':');
+    if (parts.length < 3) return null;
+    const kind = parts.shift();
+    const pubkey = parts.shift();
+    const d = parts.join(':');
+    if (kind !== '30009' || !pubkey || !d) return null;
+    return { pubkey, d, key: `${pubkey}:${d}` };
+  }
+
+  function badgeInfoFromEvents(award, definition) {
+    const image = sanitizeMediaUrl(getBadgeDefTag(definition, 'image') || getBadgeDefTag(definition, 'thumb'));
+    const awardATag = ((award && award.tags) || []).find((t) => Array.isArray(t) && t[0] === 'a' && t[1]);
+    const ref = parseBadgeAddressRef(awardATag ? awardATag[1] : '');
+    const badgeId = (getBadgeDefTag(definition, 'd') || (ref && ref.d) || '').trim();
+    const displayName = (getBadgeDefTag(definition, 'name') || badgeId || '').trim();
+    const fallbackName = displayName || (ref ? `Award ${shortHex(ref.pubkey)}` : 'Unknown award');
+    const desc = getBadgeDefTag(definition, 'description') || '';
+    const issuer = (getBadgeDefTag(definition, 'issuer') || (definition && definition.pubkey) || (ref && ref.pubkey) || '').trim();
+
+    return {
+      image,
+      name: fallbackName,
+      desc,
+      id: badgeId,
+      issuer
+    };
+  }
+
   function subscribeBadges(pubkey) {
     if (!pubkey) return;
     if (state.badgeSubId) { state.pool.unsubscribe(state.badgeSubId); state.badgeSubId = null; }
@@ -4501,14 +5012,16 @@
           // Each award references a badge definition via 'a' tag: "30009:creatorPubkey:d-tag"
           const aTags = (ev.tags || []).filter((t) => t[0] === 'a' && t[1]);
           aTags.forEach((aTag) => {
-            const parts = aTag[1].split(':');
-            if (parts[0] !== '30009' || !parts[1] || !parts[2]) return;
-            const defKey = `${parts[1]}:${parts[2]}`;
+            const ref = parseBadgeAddressRef(aTag[1]);
+            if (!ref) return;
             const awardMap = state.badgesByPubkey.get(pubkey);
-            if (!awardMap.has(defKey)) {
-              awardMap.set(defKey, { award: ev, definition: state.badgeDefMap.get(defKey) || null });
-              // Fetch definition if not cached
-              if (!state.badgeDefMap.has(defKey)) fetchBadgeDefinition(parts[1], parts[2]);
+            const existing = awardMap.get(ref.key);
+            if (!existing || Number(existing.award && existing.award.created_at || 0) <= Number(ev.created_at || 0)) {
+              awardMap.set(ref.key, { award: ev, definition: state.badgeDefMap.get(ref.key) || (existing && existing.definition) || null });
+            }
+            // Fetch definition if not cached
+            if (!state.badgeDefMap.has(ref.key)) {
+              fetchBadgeDefinition(ref.pubkey, ref.d);
             }
           });
           renderProfileBadges(pubkey);
@@ -4566,22 +5079,20 @@
     bioGrid.classList.add('has-badges');
     grid.innerHTML = '';
 
-    const MAX_SHOWN = 9; // 3Ã—3 grid
+    const MAX_SHOWN = 9; // 3x3 grid
 
     function makeBadgeChip(award, definition) {
       const chip = document.createElement('div');
       chip.className = 'profile-badge-chip';
-      const image = getBadgeDefTag(definition, 'image') || getBadgeDefTag(definition, 'thumb');
-      const name = getBadgeDefTag(definition, 'name') || getBadgeDefTag(definition, 'd') || 'ðŸ…';
-      const desc = getBadgeDefTag(definition, 'description');
-      if (image && isLikelyUrl(image)) {
+      const info = badgeInfoFromEvents(award, definition);
+      if (info.image && isLikelyUrl(info.image)) {
         const img = document.createElement('img');
-        img.src = image; img.alt = name; img.loading = 'lazy';
-        img.onerror = () => { chip.textContent = 'ðŸ…'; };
+        img.src = info.image; img.alt = info.name; img.loading = 'lazy';
+        img.onerror = () => { chip.innerHTML = ''; };
         chip.appendChild(img);
-      } else { chip.textContent = 'ðŸ…'; }
-      chip.title = name;
-      chip.addEventListener('click', () => { openBadgePopup({ name, desc, image, definition, award }); });
+      } else { chip.textContent = ''; }
+      chip.title = info.name;
+      chip.addEventListener('click', () => { openBadgePopup({ ...info, definition, award }); });
       return chip;
     }
 
@@ -4763,18 +5274,24 @@
     const nip05Main = qs('#profNip05');
     const nip05Check = qs('#profNip05Check');
     const npubEl = qs('#profNpub');
+    const claimedNip05 = normalizeNip05Value(p.nip05 || '');
+    const verifiedNip05 = getVerifiedNip05ForPubkey(pubkey, claimedNip05);
+    if (claimedNip05 && !verifiedNip05) ensureNip05Verification(pubkey, claimedNip05).catch(() => {});
 
     if (npubEl) npubEl.textContent = formatNpubForDisplay(pubkey);
 
-    if (p.nip05) {
-      if (nip05Main) { nip05Main.style.display = 'flex'; nip05Main.textContent = `NIP-05: ${p.nip05}`; }
+    if (verifiedNip05) {
+      if (nip05Main) { nip05Main.style.display = 'flex'; nip05Main.textContent = `NIP-05: ${verifiedNip05}`; }
       if (nip05Check) nip05Check.style.display = 'inline';
+    } else if (claimedNip05) {
+      if (nip05Main) { nip05Main.style.display = 'flex'; nip05Main.textContent = `Claimed NIP-05: ${claimedNip05}`; }
+      if (nip05Check) nip05Check.style.display = 'none';
     } else {
       if (nip05Main) nip05Main.style.display = 'none';
       if (nip05Check) nip05Check.style.display = 'none';
     }
     if (npubEl) npubEl.style.display = 'block';
-    setProfileVerificationStyle(!!p.nip05);
+    setProfileVerificationStyle(!!verifiedNip05);
 
     const bio = qs('#profBio');
     const bioText = (p.about || 'No bio yet.').trim() || 'No bio yet.';
@@ -4924,7 +5441,9 @@
     if (!pubkey) return;
     state.selectedProfilePubkey = pubkey;
     const p = profileFor(pubkey);
-    window.showProfile(p.name, pickAvatar(pubkey), formatNpubForDisplay(pubkey), p.nip05, pubkey, { routeMode });
+    const verifiedNip05 = getVerifiedNip05ForPubkey(pubkey, p.nip05 || '');
+    if (!verifiedNip05 && normalizeNip05Value(p.nip05 || '')) ensureNip05Verification(pubkey, p.nip05 || '').catch(() => {});
+    window.showProfile(p.name, pickAvatar(pubkey), formatNpubForDisplay(pubkey), verifiedNip05, pubkey, { routeMode });
     renderProfilePage(pubkey);
     subscribeProfileFeed(pubkey);
     subscribeProfileStats(pubkey);
@@ -4988,11 +5507,23 @@
     state.authMode = authMode;
     state.followPublishPending = false;
     state.streamLikePublishPending = false;
+    state.goLiveSelectedAddress = '';
+    state.goLiveHiddenEndedAddresses = loadHiddenEndedStreamsForPubkey(pubkey);
+    state.boostedStreamAddresses = new Set();
+    state.streamBoostEventIdByAddress = new Map();
+    state.streamBoostCheckedByAddress = new Set();
+    state.streamBoostCheckPendingByAddress = new Set();
     state.streamReactionPublishPendingByKey = new Set();
     state.postReactionPublishPendingByNoteAndKey = new Set();
     state.user = { pubkey, profile: state.profilesByPubkey.get(pubkey) || null };
+    ensureNip05Verification(pubkey, state.user.profile && state.user.profile.nip05 || '').catch(() => {});
     setUserUi();
     renderStreamReactionsUi();
+    const selected = state.selectedStreamAddress && state.streamsByAddress.get(state.selectedStreamAddress);
+    if (selected) {
+      updateTheaterShareBtn(selected);
+      refreshOwnStreamBoostState(selected);
+    }
     window.closeLogin();
     subscribeProfiles([pubkey]);
   }
@@ -5097,9 +5628,9 @@
 
     // Reset reveal/copy buttons
     const revealBtn = qs('#onbRevealBtn');
-    if (revealBtn) revealBtn.textContent = 'ðŸ‘ Reveal';
+    if (revealBtn) revealBtn.textContent = '👁 Reveal';
     const copyBtn = qs('#onbCopyBtn');
-    if (copyBtn) { copyBtn.textContent = 'ðŸ“‹ Copy'; copyBtn.classList.remove('copied'); }
+    if (copyBtn) { copyBtn.textContent = '📋 Copy'; copyBtn.classList.remove('copied'); }
 
     // Reset checkbox + continue button
     const check = qs('#onbSavedCheck');
@@ -5159,7 +5690,7 @@
     const btn = qs('#onbRevealBtn');
     if (!el) return;
     const revealed = el.classList.toggle('revealed');
-    if (btn) btn.textContent = revealed ? 'ðŸ™ˆ Hide' : 'ðŸ‘ Reveal';
+    if (btn) btn.textContent = revealed ? '🙈 Hide' : '👁 Reveal';
   }
 
   // Called from HTML: copy nsec to clipboard
@@ -5170,15 +5701,15 @@
       await navigator.clipboard.writeText(value);
       const btn = qs('#onbCopyBtn');
       if (btn) {
-        btn.textContent = 'âœ“ Copied!';
+        btn.textContent = '✓ Copied!';
         btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'ðŸ“‹ Copy'; btn.classList.remove('copied'); }, 2000);
+        setTimeout(() => { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
       }
       // Also reveal so user can verify what was copied
       const el = qs('#onbNsecValue');
       if (el) { el.classList.add('revealed'); }
       const revBtn = qs('#onbRevealBtn');
-      if (revBtn) revBtn.textContent = 'ðŸ™ˆ Hide';
+      if (revBtn) revBtn.textContent = '🙈 Hide';
     } catch (_) {
       alert('Clipboard blocked. Please manually select and copy the key.');
     }
@@ -5252,7 +5783,7 @@
       applySettings(nextSettings, { reconnect: false });
       closeOnboarding();
     } catch (err) {
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'âœ“ Save & Enter Sifaka Live'; }
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✓ Save & Enter Sifaka Live'; }
       alert(err.message || 'Failed to publish profile. Please try again.');
     }
   }
@@ -5342,15 +5873,41 @@
     const startsInput = qs('#goLiveStarts');
     const statusEl = qs('.srow .sc.sl');
 
-    const current = state.streamsByAddress.get(state.selectedStreamAddress);
-    const dTag = (statusOverride && current ? current.d : (dTagInput && dTagInput.value.trim())) || `stream-${Date.now()}`;
-    const title = (statusOverride && current ? current.title : (titleInput && titleInput.value.trim())) || 'Untitled stream';
-    const summary = (statusOverride && current ? current.summary : (summaryInput && summaryInput.value.trim())) || '';
-    const streamUrl = (statusOverride && current ? current.streaming : (streamUrlInput && streamUrlInput.value.trim())) || '';
-    const thumb = (thumbInput && thumbInput.value.trim()) || '';
-    const starts = statusOverride && current ? current.starts : toUnixSeconds(startsInput && startsInput.value);
-    const rawStatus = (statusOverride || (statusEl ? statusEl.textContent : 'live')).toLowerCase();
-    const status = rawStatus.includes('ended') ? 'ended' : (rawStatus.includes('planned') ? 'planned' : 'live');
+    const preferredAddress = statusOverride
+      ? state.selectedStreamAddress
+      : (state.goLiveSelectedAddress || state.selectedStreamAddress);
+    const currentEditAddress = (preferredAddress || '').trim();
+    const current = currentEditAddress ? state.streamsByAddress.get(currentEditAddress) : null;
+    const useCurrentFields = !!(statusOverride && current);
+
+    const dTagVal = dTagInput ? dTagInput.value.trim() : '';
+    const titleVal = titleInput ? titleInput.value.trim() : '';
+    const summaryVal = summaryInput ? summaryInput.value.trim() : '';
+    const streamUrlVal = streamUrlInput ? streamUrlInput.value.trim() : '';
+    const thumbVal = thumbInput ? thumbInput.value.trim() : '';
+    const startsRaw = startsInput ? startsInput.value : '';
+    const startsParsed = toUnixSeconds(startsRaw);
+
+    const dTag = useCurrentFields
+      ? ((current && current.d) || `stream-${Date.now()}`)
+      : (dTagVal || (current ? current.d : '') || `stream-${Date.now()}`);
+    const title = useCurrentFields
+      ? ((current && current.title) || 'Untitled stream')
+      : (titleVal || (current ? current.title : '') || 'Untitled stream');
+    const summary = useCurrentFields
+      ? ((current && current.summary) || '')
+      : (summaryInput ? summaryVal : ((current && current.summary) || ''));
+    const streamUrl = useCurrentFields
+      ? ((current && current.streaming) || '')
+      : (streamUrlInput ? streamUrlVal : ((current && current.streaming) || ''));
+    const thumb = useCurrentFields
+      ? ((current && current.image) || '')
+      : (thumbInput ? thumbVal : ((current && current.image) || ''));
+    const starts = useCurrentFields
+      ? ((current && current.starts) || null)
+      : (startsInput ? (startsRaw ? startsParsed : null) : ((current && current.starts) || null));
+    const rawStatus = statusOverride || (statusEl ? statusEl.textContent : ((current && current.status) || 'live'));
+    const status = normalizeStreamStatus(rawStatus);
 
     const tags = [
       ['d', dTag],
@@ -5369,7 +5926,17 @@
     const stream = parseLiveEvent(ev);
     upsertStream(stream);
     state.selectedStreamAddress = stream.address;
+    if (status === 'ended') {
+      state.goLiveHiddenEndedAddresses.add(stream.address);
+      if (state.goLiveSelectedAddress === stream.address) state.goLiveSelectedAddress = '';
+    } else {
+      state.goLiveHiddenEndedAddresses.delete(stream.address);
+      state.goLiveSelectedAddress = stream.address;
+    }
+    persistHiddenEndedStreamsForCurrentUser();
     state.isLive = status === 'live';
+    updateGoLiveModalState();
+    updateGoLiveButtonState();
     renderLiveGrid();
     // Refresh hero if this is the currently featured stream
     const featStreams = heroFeaturedStreams();
@@ -5413,7 +5980,7 @@
     const ownPubkey = normalizePubkeyHex(state.user.pubkey);
     if (!ownPubkey) { state.streamLikePublishPending = false; return; }
     const alreadyLiked = state.likedStreamAddresses.has(stream.address);
-    const likeMeta = { key: '+', label: 'â¤', imageUrl: '', shortcode: '' };
+    const likeMeta = { key: '+', label: '❤', imageUrl: '', shortcode: '' };
 
     try {
       if (alreadyLiked) {
@@ -5629,16 +6196,26 @@
       setAvatarEl(qs('#profAv'), '', av || 'U');
       if (qs('#profName')) qs('#profName').textContent = name || 'user';
       if (qs('#profNpub')) qs('#profNpub').textContent = formatNpubForDisplay(npub || rawPubkey || '');
-      setProfileVerificationStyle(!!nip05);
+      const normalizedRawPubkey = normalizePubkeyHex(rawPubkey || '') || parseNpubMaybe(npub || '');
+      const claimedNip05 = normalizeNip05Value(nip05 || '');
+      const verifiedNip05 = normalizedRawPubkey ? getVerifiedNip05ForPubkey(normalizedRawPubkey, claimedNip05) : '';
+      if (claimedNip05 && normalizedRawPubkey && !verifiedNip05) ensureNip05Verification(normalizedRawPubkey, claimedNip05).catch(() => {});
+      setProfileVerificationStyle(!!verifiedNip05);
 
       const n05 = qs('#profNip05');
       const n05c = qs('#profNip05Check');
-      if (nip05) {
+      if (verifiedNip05) {
         if (n05) {
           n05.style.display = 'flex';
-          n05.textContent = `NIP-05: ${nip05}`;
+          n05.textContent = `NIP-05: ${verifiedNip05}`;
         }
         if (n05c) n05c.style.display = 'inline';
+      } else if (claimedNip05) {
+        if (n05) {
+          n05.style.display = 'flex';
+          n05.textContent = `Claimed NIP-05: ${claimedNip05}`;
+        }
+        if (n05c) n05c.style.display = 'none';
       } else {
         if (n05) n05.style.display = 'none';
         if (n05c) n05c.style.display = 'none';
@@ -5649,10 +6226,10 @@
         qs('#profBio').textContent = 'No bio yet.';
       }
 
-      let inferredPubkey = (/^[0-9a-f]{64}$/i.test(rawPubkey || '') ? rawPubkey : parseNpubMaybe(npub || ''));
+      let inferredPubkey = normalizedRawPubkey;
       if (!inferredPubkey) {
         const wantedName = (name || '').trim().toLowerCase();
-        const wantedNip05 = (nip05 || '').trim().toLowerCase();
+        const wantedNip05 = claimedNip05;
         const fallback = Array.from(state.profilesByPubkey.values()).find((entry) => {
           const entryName = (entry.name || '').trim().toLowerCase();
           const entryNip05 = (entry.nip05 || '').trim().toLowerCase();
@@ -5692,7 +6269,7 @@
         if (postsBtn) postsBtn.style.display = 'none';
         if (state.profileTab === 'posts') state.profileTab = 'streams';
         renderProfileFollowButton('');
-        setProfileVerificationStyle(!!nip05);
+        setProfileVerificationStyle(!!verifiedNip05);
 
         const websiteRow = qs('#profWebsiteRow');
         const lud16Row = qs('#profLud16Row');
@@ -5797,7 +6374,7 @@
 
       const lists = Array.from(state.nip51Lists.values());
       if (!lists.length) {
-        itemsEl.innerHTML = '<div class="atl-empty">No lists yet â€” create one below.</div>';
+        itemsEl.innerHTML = '<div class="atl-empty">No lists yet - create one below.</div>';
         return;
       }
 
@@ -5807,7 +6384,7 @@
         btn.className = 'atl-item';
         const inList = !!(pubkey && list.pubkeys.includes(pubkey));
         if (inList) {
-          btn.textContent = 'âœ“ ' + (list.name || 'Unnamed List');
+          btn.textContent = '✓ ' + (list.name || 'Unnamed List');
           btn.classList.add('atl-saved');
           btn.title = 'Click to remove from this list';
         } else {
@@ -5943,32 +6520,65 @@
         window.openLogin();
         return;
       }
-      const dtag = qs('#goLiveDTag');
-      if (dtag && !dtag.value.trim()) dtag.value = `stream-${Date.now()}`;
-      const starts = qs('#goLiveStarts');
-      if (starts && !starts.value) starts.value = fromUnixSeconds(Math.floor(Date.now() / 1000));
-      qs('#goLiveModal').classList.add('open');
-      qs('#mForm').style.display = 'block';
-      qs('#mSuccess').className = 'msuccess';
+      if (!state.goLiveSelectedAddress && state.selectedStreamAddress) {
+        state.goLiveSelectedAddress = state.selectedStreamAddress;
+      }
+      updateGoLiveModalState();
+      const modal = qs('#goLiveModal');
+      const form = qs('#mForm');
+      const success = qs('#mSuccess');
+      if (modal) modal.classList.add('open');
+      if (form) form.style.display = 'block';
+      if (success) success.className = 'msuccess';
     };
 
     window.closeGoLive = function () { qs('#goLiveModal').classList.remove('open'); };
 
+    window.selectGoLiveStream = function (address) {
+      state.goLiveSelectedAddress = (address || '').trim();
+      updateGoLiveModalState();
+    };
+
+    window.removeGoLiveStreamFromList = function () {
+      const address = (state.goLiveSelectedAddress || '').trim();
+      if (!address) return;
+      const stream = state.streamsByAddress.get(address);
+      if (stream && normalizeStreamStatus(stream.status) !== 'ended') {
+        alert('Only ended streams can be removed from this list.');
+        return;
+      }
+      state.goLiveHiddenEndedAddresses.add(address);
+      if (state.goLiveSelectedAddress === address) state.goLiveSelectedAddress = '';
+      persistHiddenEndedStreamsForCurrentUser();
+      updateGoLiveModalState();
+    };
+
     window.publishStream = async function () {
       try {
-        await publishCurrentStream();
-        qs('#mForm').style.display = 'none';
-        qs('#mSuccess').classList.add('on');
-        state.isLive = true;
-        qs('#goLiveBtn').style.display = 'none';
-        qs('#myLiveBtn').style.display = 'flex';
+        const stream = await publishCurrentStream();
+        const status = normalizeStreamStatus(stream.status);
+        const form = qs('#mForm');
+        const success = qs('#mSuccess');
+        const succTitle = success ? qs('.succ-title', success) : null;
+        const succText = success ? qs('.succ-text', success) : null;
+        if (form) form.style.display = 'none';
+        if (success) success.classList.add('on');
+        if (succTitle) succTitle.textContent = status === 'ended'
+          ? 'Stream Ended'
+          : (status === 'planned' ? 'Stream Updated' : "You're Live on Nostr!");
+        if (succText) succText.textContent = status === 'ended'
+          ? 'Your ended status has been published and removed from the edit list.'
+          : (status === 'planned'
+            ? 'Your stream details were updated with planned status.'
+            : 'Your NIP-53 event is live on your relays.');
       } catch (err) {
         alert(err.message || 'Failed to publish stream.');
       }
     };
 
     window.goToMyStream = function () {
-      if (state.selectedStreamAddress) openStream(state.selectedStreamAddress);
+      const address = state.goLiveSelectedAddress || state.selectedStreamAddress;
+      if (address) openStream(address);
       window.closeGoLive();
     };
 
@@ -5983,9 +6593,13 @@
       }
       window.closeEnd();
       state.isLive = false;
-      qs('#goLiveBtn').style.display = 'flex';
-      qs('#myLiveBtn').style.display = 'none';
-      window.showPage('home');
+      const selected = state.selectedStreamAddress && state.streamsByAddress.get(state.selectedStreamAddress);
+      if (selected && normalizeStreamStatus(selected.status) === 'ended') {
+        renderVideo(selected);
+        window.showVideoPage({ routeMode: 'replace' });
+      } else {
+        window.showPage('home');
+      }
     };
 
     window.openLogin = function () { qs('#loginModal').classList.add('open'); };
@@ -6185,7 +6799,7 @@
     };
 
     window.toggleProfilePostLike = async function (noteId, notePubkey, profilePubkey) {
-      await togglePostReactionByMeta(noteId, notePubkey, profilePubkey, { key: '+', label: 'â¤', imageUrl: '', shortcode: '' });
+      await togglePostReactionByMeta(noteId, notePubkey, profilePubkey, { key: '+', label: '❤', imageUrl: '', shortcode: '' });
     };
 
     window.toggleProfilePostEmoji = async function (noteId, notePubkey, profilePubkey, reactionKey, imageUrl = '', shortcode = '') {
@@ -6414,7 +7028,7 @@
           <div class="reco-thumb"><div class="tc ${thumbClasses[i % thumbClasses.length]}" style="height:100%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;"></div></div>
           <div class="reco-text"><div class="rt"></div><div class="rs"></div></div>`;
         qs('.rt', item).textContent = s.title || 'Untitled stream';
-        qs('.rs', item).innerHTML = `${p.name || shortHex(s.hostPubkey)} â€” <span style="color:var(--live)">${viewerCount > 0 ? viewerCount.toLocaleString() + ' live' : 'live'}</span>`;
+        qs('.rs', item).innerHTML = `${p.name || shortHex(s.hostPubkey)} - <span style="color:var(--live)">${viewerCount > 0 ? viewerCount.toLocaleString() + ' live' : 'live'}</span>`;
         if (s.image) {
           const thumb = qs('.reco-thumb', item);
           thumb.innerHTML = `<img src="${s.image}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`;
@@ -6471,7 +7085,7 @@
           await window.webln.enable();
           const zapAmountMsats = 21000;
           const zapTags = [['relays', ...state.relays], ['amount', String(zapAmountMsats)], ['p', stream.pubkey], ['e', stream.id]];
-          const zapRequest = await signAndPublish(9734, 'âš¡ zapping from Sifaka Live', zapTags);
+          const zapRequest = await signAndPublish(9734, '⚡ zapping from Sifaka Live', zapTags);
           const [user, domain] = lud16.split('@');
           const meta = await fetch(`https://${domain}/.well-known/lnurlp/${user}`).then((r) => r.json());
           if (!meta.callback) throw new Error('Invalid LNURL response.');
@@ -6479,7 +7093,7 @@
           if (!invoiceData.pr) throw new Error('No payment request returned.');
           await window.webln.sendPayment(invoiceData.pr);
           const zapBtn = qs('#theaterZapBtn');
-          if (zapBtn) { const o = zapBtn.innerHTML; zapBtn.textContent = 'âš¡ Zapped!'; setTimeout(() => { zapBtn.innerHTML = o; }, 2000); }
+          if (zapBtn) { const o = zapBtn.innerHTML; zapBtn.textContent = '⚡ Zapped!'; setTimeout(() => { zapBtn.innerHTML = o; }, 2000); }
           return;
         } catch (err) { console.warn('WebLN zap failed:', err.message); }
       }
@@ -6522,7 +7136,11 @@
           if (!state.user) { window.openLogin(); return; }
           const repostTags = [['e', stream.id], ['p', stream.pubkey], ['a', stream.address]];
           const repostContent = stream.raw && stream.raw.id ? JSON.stringify(stream.raw) : '';
-          await signAndPublish(6, repostContent, repostTags);
+          const repostEv = await signAndPublish(6, repostContent, repostTags);
+          state.boostedStreamAddresses.add(stream.address);
+          if (repostEv && repostEv.id) state.streamBoostEventIdByAddress.set(stream.address, repostEv.id);
+          state.streamBoostCheckedByAddress.add(stream.address);
+          updateTheaterShareBtn(stream);
           window.closeShareModal();
           return;
         }
@@ -6586,7 +7204,7 @@
     }
 
     // ---- Badge popup ----
-    window.openBadgePopup = function ({ name, desc, image, definition, award }) {
+    window.openBadgePopup = function ({ name, desc, image, id, issuer, definition, award }) {
       const ov = qs('#badgePopupOv');
       if (!ov) return;
 
@@ -6595,30 +7213,35 @@
       const descEl = qs('#badgePopupDesc');
       const metaEl = qs('#badgePopupMeta');
 
-      if (nameEl) nameEl.textContent = name || 'Badge';
-      if (descEl) descEl.textContent = desc || '';
+      const info = badgeInfoFromEvents(award, definition);
+      const finalName = (name || info.name || '').trim();
+      const finalDesc = desc || info.desc || '';
+      const finalId = (id || info.id || '').trim();
+      const finalIssuer = (issuer || info.issuer || '').trim();
+
+      if (nameEl) nameEl.textContent = finalName || 'Award';
+      if (descEl) descEl.textContent = finalDesc;
 
       if (imgWrap) {
         imgWrap.innerHTML = '';
-        if (image && isLikelyUrl(image)) {
+        const imageUrl = sanitizeMediaUrl(image || info.image || '');
+        if (imageUrl && isLikelyUrl(imageUrl)) {
           const img = document.createElement('img');
-          img.src = image;
-          img.alt = name || 'Badge';
-          img.onerror = () => { imgWrap.textContent = 'ðŸ…'; };
+          img.src = imageUrl;
+          img.alt = finalName || 'Award';
+          img.onerror = () => { imgWrap.textContent = ''; };
           imgWrap.appendChild(img);
         } else {
-          imgWrap.textContent = 'ðŸ…';
+          imgWrap.textContent = '';
         }
       }
 
       if (metaEl) {
         metaEl.innerHTML = '';
         const rows = [];
+        if (finalIssuer) rows.push({ lbl: 'Issued by', val: finalIssuer });
+        if (finalId) rows.push({ lbl: 'Badge ID', val: finalId });
         if (definition) {
-          const creator = getBadgeDefTag(definition, 'issuer') || shortHex(definition.pubkey);
-          rows.push({ lbl: 'Issued by', val: creator });
-          const d = getBadgeDefTag(definition, 'd');
-          if (d) rows.push({ lbl: 'Badge ID', val: d });
           if (definition.created_at) {
             rows.push({ lbl: 'Created', val: new Date(definition.created_at * 1000).toLocaleDateString() });
           }
@@ -6653,17 +7276,15 @@
       badges.forEach(({ award, definition }) => {
         const chip = document.createElement('div');
         chip.className = 'profile-badge-chip';
-        const image = getBadgeDefTag(definition, 'image') || getBadgeDefTag(definition, 'thumb');
-        const name = getBadgeDefTag(definition, 'name') || getBadgeDefTag(definition, 'd') || 'ðŸ…';
-        const desc = getBadgeDefTag(definition, 'description');
-        if (image && isLikelyUrl(image)) {
+        const info = badgeInfoFromEvents(award, definition);
+        if (info.image && isLikelyUrl(info.image)) {
           const img = document.createElement('img');
-          img.src = image; img.alt = name; img.loading = 'lazy';
-          img.onerror = () => { chip.textContent = 'ðŸ…'; };
+          img.src = info.image; img.alt = info.name; img.loading = 'lazy';
+          img.onerror = () => { chip.innerHTML = ''; };
           chip.appendChild(img);
-        } else { chip.textContent = 'ðŸ…'; }
-        chip.title = name;
-        chip.addEventListener('click', () => { openBadgePopup({ name, desc, image, definition, award }); });
+        } else { chip.textContent = ''; }
+        chip.title = info.name;
+        chip.addEventListener('click', () => { openBadgePopup({ ...info, definition, award }); });
         grid.appendChild(chip);
       });
       ov.classList.add('open');
@@ -6689,6 +7310,10 @@
       state.likedStreamAddresses = new Set();
       state.streamLikeEventIdByAddress = new Map();
       state.streamLikePublishPending = false;
+      state.boostedStreamAddresses = new Set();
+      state.streamBoostEventIdByAddress = new Map();
+      state.streamBoostCheckedByAddress = new Set();
+      state.streamBoostCheckPendingByAddress = new Set();
       state.streamReactionPubkeysByKey = new Map();
       state.streamReactionMetaByKey = new Map();
       state.streamReactionIdByKeyAndPubkey = new Map();
@@ -6704,6 +7329,11 @@
       state.postReactionPublishPendingByNoteAndKey = new Set();
       state.reactionPickerTarget = null;
       state.shareModalStreamAddress = '';
+      state.goLiveSelectedAddress = '';
+      state.goLiveHiddenEndedAddresses = new Set();
+      state.nip05VerificationByPubkey = new Map();
+      state.nip05VerificationPendingByPubkey = new Set();
+      state.nip05LookupCacheByNip05 = new Map();
       window.closeAllDD();
       ['goLiveModal','endModal','loginModal','settingsModal','faqModal','shareModal','reactionPickerModal'].forEach((id) => {
         const el = qs('#' + id); if (el) el.classList.remove('open');
@@ -6718,19 +7348,20 @@
   function initEmojiPicker() {
     const emojis = [':)', ':D', '<3', ':fire:', ':zap:', ':rocket:', ':100:', ':wave:', ':music:', ':clap:'];
     const grid = qs('#epGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    emojis.forEach((emoji) => {
-      const d = document.createElement('div');
-      d.className = 'ep-emoji';
-      d.textContent = emoji;
-      d.onclick = () => {
-        const input = qs('.chat-inp');
-        if (input) input.value += emoji;
-        window.closeEmoji();
-      };
-      grid.appendChild(d);
-    });
+    if (grid) {
+      grid.innerHTML = '';
+      emojis.forEach((emoji) => {
+        const d = document.createElement('div');
+        d.className = 'ep-emoji';
+        d.textContent = emoji;
+        d.onclick = () => {
+          const input = qs('.chat-inp');
+          if (input) input.value += emoji;
+          window.closeEmoji();
+        };
+        grid.appendChild(d);
+      });
+    }
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.chat-acts')) window.closeEmoji();

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -92,7 +92,7 @@ nav {
 .sr-label{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;padding:.2rem .65rem .3rem;display:block;}
 .sr-item{display:flex;align-items:center;gap:.65rem;padding:.46rem .65rem;border-radius:7px;cursor:pointer;transition:background .1s;}
 .sr-item:hover{background:var(--surface2);}
-.sr-av{width:26px;height:26px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;}
+.sr-av{width:32px;height:32px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;}
 .sr-av.rect{border-radius:5px;}
 .sr-av.nip05-square{
   border-radius:5px;
@@ -135,6 +135,7 @@ nav {
   50%{box-shadow:0 0 0 1px rgba(0,212,138,.48),0 0 18px rgba(0,212,138,.35);}
 }
 .btn-live-pulse{background:var(--live);color:#fff;animation:livePulse 2.5s ease infinite;}
+.btn-edit-stream-live{border:1px solid rgba(255,59,92,.6);box-shadow:0 0 0 1px rgba(255,59,92,.25),0 0 20px rgba(255,59,92,.22);}
 @keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,92,.4)}50%{box-shadow:0 0 0 6px rgba(255,59,92,0)}}
 
 /* Profile pill - locked to far right */
@@ -147,12 +148,12 @@ nav {
 }
 .nav-user-pill:hover{background:var(--surface2);border-color:var(--border);}
 .nav-user-pill.dd-open{background:var(--surface2);border-color:var(--border);}
-.nav-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:.88rem;overflow:hidden;flex-shrink:0;border:2px solid var(--border2);}
+.nav-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:1rem;overflow:hidden;flex-shrink:0;border:2px solid var(--border2);}
 .nav-display-name{font-size:.82rem;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .nip05-badge{color:var(--nip05);font-size:.72rem;font-weight:700;opacity:.85;}
 
 .pd-header{padding:.65rem .85rem .75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.65rem;}
-.pd-av-lg{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;border:2px solid var(--border2);}
+.pd-av-lg{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;border:2px solid var(--border2);}
 .pd-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:.3rem;}
 .pd-sub{font-family:'DM Mono',monospace;font-size:.64rem;color:var(--muted);margin-top:.1rem;}
 .pd-item{display:flex;align-items:center;gap:.65rem;padding:.52rem .85rem;border-radius:7px;font-size:.82rem;color:var(--text2);cursor:pointer;transition:background .1s;width:100%;border:none;background:none;text-align:left;font-family:'DM Sans',sans-serif;}
@@ -185,7 +186,7 @@ nav {
 @keyframes dotP{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 .hero-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;line-height:1.2;letter-spacing:-.02em;margin-bottom:.4rem;}
 .hero-host{display:flex;align-items:center;gap:.5rem;font-size:.81rem;color:var(--text2);margin-bottom:.65rem;}
-.hero-av{width:24px;height:24px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.75rem;}
+.hero-av{width:30px;height:30px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.88rem;}
 .hero-summary{font-size:.82rem;color:var(--text2);line-height:1.6;margin-bottom:.85rem;}
 .hero-stats{display:flex;gap:1.1rem;margin-bottom:1rem;}
 .h-stat .val{font-family:'DM Mono',monospace;font-size:.8rem;font-weight:500;color:var(--text);}
@@ -230,7 +231,7 @@ nav {
 .cb-viewers{position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,.75);color:var(--text);font-family:'DM Mono',monospace;font-size:.6rem;padding:.13rem .42rem;border-radius:3px;}
 .ci{padding:.52rem .08rem .08rem;}
 .ci-row{display:flex;gap:.48rem;}
-.ci-av{width:28px;height:28px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem;border:1px solid var(--border);}
+.ci-av{width:34px;height:34px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1rem;border:1px solid var(--border);}
 .ci-av.nip05-square{border-radius:5px;border:1.5px solid rgba(155,114,255,.7);background:rgba(155,114,255,.13);box-shadow:0 0 8px rgba(155,114,255,.55),0 0 18px rgba(155,114,255,.25),inset 0 0 6px rgba(155,114,255,.1);animation:nip05Pulse 2.8s ease-in-out infinite;}
 .ci-title{font-size:.79rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .ci-host{font-size:.71rem;color:var(--text2);margin-top:.13rem;}
@@ -266,7 +267,7 @@ nav {
 }
 @keyframes hostedBySweep{0%{transform:translateX(-100%);}100%{transform:translateX(200%);}}
 .hosted-by-av{
-  width:20px;height:20px;border-radius:50%;flex-shrink:0;
+  width:24px;height:24px;border-radius:50%;flex-shrink:0;
   background:var(--surface3);border:1.5px solid rgba(155,114,255,.4);
   overflow:hidden;display:flex;align-items:center;justify-content:center;z-index:1;
 }
@@ -314,21 +315,23 @@ nav {
 
 /* Host row */
 .sib-host-row{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;}
-.sib-av{width:40px;height:40px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:1.1rem;border:2px solid var(--border2);flex-shrink:0;cursor:pointer;transition:border-color .15s;}
+.sib-av{width:52px;height:52px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:1.3rem;border:2px solid var(--border2);flex-shrink:0;cursor:pointer;transition:border-color .15s;}
 .sib-av:hover{border-color:var(--accent);}
 .sib-host-info{flex:1;min-width:0;}
 .sib-name{font-weight:700;font-size:.92rem;font-family:'Syne',sans-serif;display:flex;align-items:center;gap:.3rem;}
 .sib-identity{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);margin-top:.06rem;}
 .nip05-text{color:var(--nip05);}
 
-/* Action buttons row (Zap, Follow, Share, Like, Report) — flush right of title */
+/* Action buttons row (Follow, Zap, Share, Report) — flush right of title */
 .sib-actions-row{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;flex-shrink:0;}
 .action-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.33rem .7rem;cursor:pointer;font-size:.77rem;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:.27rem;transition:all .15s;font-weight:500;}
 .action-btn:hover{border-color:var(--border2);color:var(--text);}
 .action-btn.like-btn:hover,.action-btn.liked{border-color:var(--live);color:var(--live);background:rgba(255,59,92,.08);}
 .action-btn.share-btn:hover{border-color:var(--green);color:var(--green);}
+.action-btn.share-btn.boosted{border-color:rgba(155,114,255,.62);color:var(--purple);background:rgba(155,114,255,.1);}
+.action-btn.share-btn.boosted:hover{border-color:var(--purple);color:var(--purple);background:rgba(155,114,255,.16);}
 .action-btn.report-btn:hover{border-color:rgba(255,100,50,.5);color:rgba(255,100,50,.8);}
-.stream-reactions-row{display:flex;align-items:center;gap:.42rem;margin-top:.55rem;flex-wrap:wrap;}
+.stream-reactions-row{display:flex;align-items:center;gap:.42rem;margin-top:.7rem;padding-top:.58rem;border-top:1px solid var(--border);flex-wrap:wrap;}
 .stream-emoji-list{display:flex;align-items:center;gap:.34rem;flex-wrap:wrap;}
 .stream-emoji-add,.stream-emoji-chip{border:1px solid var(--border2);background:var(--surface2);color:var(--text2);border-radius:999px;font-family:'DM Mono',monospace;font-size:.68rem;display:inline-flex;align-items:center;gap:.24rem;cursor:pointer;transition:all .14s;}
 .stream-emoji-add{padding:.2rem .45rem;font-weight:700;}
@@ -337,6 +340,7 @@ nav {
 .stream-emoji-chip.active{border-color:var(--green);color:var(--green);background:rgba(0,212,138,.1);}
 .stream-emoji-chip img{width:14px;height:14px;object-fit:contain;display:block;}
 .stream-emoji-count{font-size:.64rem;color:var(--text);}
+.stream-like-counter{border:1px solid var(--border2);background:var(--surface2);color:var(--text2);border-radius:999px;font-family:'DM Mono',monospace;font-size:.68rem;padding:.2rem .55rem;}
 
 /* Stats row - followers now included here */
 .sib-stats-row{display:flex;gap:1rem;margin-top:.65rem;padding-top:.6rem;border-top:1px solid var(--border);align-items:center;flex-wrap:wrap;}
@@ -384,7 +388,7 @@ nav {
 
 .cmsg{display:flex;gap:.4rem;align-items:flex-start;position:relative;}
 .cmsg:hover .chat-msg-actions{opacity:1;pointer-events:all;}
-.c-av{width:22px;height:22px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;border:1px solid var(--border);cursor:pointer;transition:border-color .15s;}
+.c-av{width:28px;height:28px;border-radius:50%;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.78rem;border:1px solid var(--border);cursor:pointer;transition:border-color .15s;}
 .c-av:hover{border-color:var(--accent);}
 .c-av.nip05-square{border-radius:4px;border:1.5px solid rgba(155,114,255,.7);background:rgba(155,114,255,.13);box-shadow:0 0 6px rgba(155,114,255,.55),0 0 14px rgba(155,114,255,.22);animation:nip05Pulse 2.8s ease-in-out infinite;}
 .c-body{flex:1;}
@@ -398,6 +402,10 @@ nav {
 .c-name.cz{color:var(--zap);}
 .c-nip05{color:var(--nip05);font-size:.64rem;font-weight:700;opacity:.75;}
 .c-text{font-size:.77rem;line-height:1.45;color:var(--text);margin-top:.07rem;}
+.chat-media-wrap{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.28rem;margin-top:.38rem;max-width:260px;}
+.chat-media-item{display:block;border:1px solid var(--border2);border-radius:8px;overflow:hidden;background:#0b1118;aspect-ratio:1/1;}
+.chat-media-item.single{grid-column:1/-1;aspect-ratio:16/9;max-height:180px;}
+.chat-media-item img{width:100%;height:100%;object-fit:cover;display:block;}
 .chat-msg-actions{position:absolute;right:0;top:-4px;display:flex;gap:.18rem;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:.2rem .28rem;opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:10;}
 .cma-btn{background:none;border:none;cursor:pointer;font-size:.73rem;padding:.1rem .18rem;border-radius:4px;color:var(--muted);transition:all .12s;line-height:1;}
 .cma-btn:hover{background:var(--surface2);color:var(--text);}
@@ -419,7 +427,7 @@ nav {
 .viewers-panel.on{display:flex;}
 .vr{display:flex;align-items:center;gap:.52rem;padding:.35rem .42rem;border-radius:7px;cursor:pointer;}
 .vr:hover{background:var(--surface2);}
-.v-av{width:26px;height:26px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;}
+.v-av{width:32px;height:32px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;}
 .v-name{font-size:.79rem;font-weight:500;display:flex;align-items:center;gap:.28rem;}
 .v-npub{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);}
 .v-badge{margin-left:auto;font-size:.62rem;padding:.12rem .36rem;border-radius:3px;font-family:'DM Mono',monospace;}
@@ -447,7 +455,7 @@ nav {
 .profile-left-stack{display:flex;flex-direction:column;gap:.85rem;min-width:0;}
 .profile-head-row{display:flex;align-items:flex-start;gap:.78rem;min-width:0;}
 .profile-av-wrap{margin-top:-14px;display:inline-flex;position:relative;z-index:4;flex-shrink:0;}
-.profile-av-big{width:98px;height:98px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:2.45rem;border:3px solid var(--bg);transition:box-shadow .18s,border-color .18s;}
+.profile-av-big{width:112px;height:112px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:2.7rem;border:3px solid var(--bg);transition:box-shadow .18s,border-color .18s;}
 .profile-identity-box,.profile-bio-box,.profile-action-box,.profile-inline-meta{
   background:rgba(20,26,33,.78);
   border:1px solid rgba(255,255,255,.09);
@@ -500,7 +508,7 @@ nav {
 .profile-feed-item{padding:.72rem .75rem;border-radius:10px;border:1px solid var(--border);background:var(--surface2);}
 .profile-feed-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.44rem;}
 .profile-feed-author{display:flex;align-items:flex-start;gap:.5rem;min-width:0;}
-.profile-feed-av{width:34px;height:34px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.82rem;overflow:hidden;}
+.profile-feed-av{width:40px;height:40px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.94rem;overflow:hidden;}
 .profile-feed-meta{min-width:0;}
 .profile-feed-name{font-weight:700;color:var(--text);font-size:.78rem;line-height:1.2;cursor:pointer;}
 .profile-feed-name:hover{text-decoration:underline;color:var(--text);}
@@ -526,7 +534,7 @@ nav {
 .profile-feed-emoji-bar{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.42rem;}
 .profile-feed-comments{display:flex;flex-direction:column;gap:.4rem;margin-top:.56rem;padding-top:.5rem;border-top:1px solid var(--border);}
 .profile-comment-item{display:flex;align-items:flex-start;gap:.45rem;}
-.profile-comment-av{width:24px;height:24px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.68rem;overflow:hidden;flex-shrink:0;}
+.profile-comment-av{width:30px;height:30px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:.78rem;overflow:hidden;flex-shrink:0;}
 .profile-comment-main{min-width:0;flex:1;}
 .profile-comment-meta{display:flex;align-items:center;gap:.36rem;}
 .profile-comment-meta .n{font-size:.7rem;font-weight:600;color:var(--text);}
@@ -647,7 +655,7 @@ nav {
 .profile-compose-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.85rem;}
 .profile-compose-box.hidden{display:none;}
 .profile-compose-header{display:flex;align-items:center;gap:.55rem;margin-bottom:.6rem;}
-.profile-compose-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:.88rem;overflow:hidden;flex-shrink:0;border:2px solid var(--border2);}
+.profile-compose-av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--zap));display:flex;align-items:center;justify-content:center;font-size:1rem;overflow:hidden;flex-shrink:0;border:2px solid var(--border2);}
 .profile-compose-label{font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;}
 .profile-compose-textarea{width:100%;min-height:80px;max-height:200px;background:#0a1018;border:1px solid var(--border2);border-radius:10px;padding:.55rem .72rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.84rem;outline:none;resize:vertical;line-height:1.5;transition:border-color .15s;}
 .profile-compose-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,70,10,.15);}
@@ -690,7 +698,7 @@ nav {
   .profile-content{padding:0 1rem 1rem;}
   .profile-head-row{align-items:center;}
   .profile-av-wrap{margin-top:-10px;}
-  .profile-av-big{width:90px;height:90px;font-size:2.1rem;}
+  .profile-av-big{width:100px;height:100px;font-size:2.3rem;}
 }
 
 /* ======== MODALS ======== */
@@ -720,6 +728,9 @@ textarea{resize:vertical;min-height:65px;line-height:1.5;}
 .sc{padding:.3rem .75rem;border-radius:7px;font-size:.76rem;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;}
 .sc.sl{border-color:var(--live);color:var(--live);background:rgba(255,59,92,.1);}
 .relay-bar{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--green);background:rgba(0,212,138,.05);border:1px solid rgba(0,212,138,.13);border-radius:8px;padding:.48rem .72rem;margin-top:.18rem;display:flex;align-items:center;gap:.32rem;}
+.go-live-manage{margin-bottom:.7rem;display:none;}
+.go-live-manage.on{display:block;}
+.go-live-manage-help{margin-top:.28rem;font-size:.68rem;color:var(--muted);line-height:1.5;}
 .mfooter{padding:.85rem 1.35rem 1.35rem;display:flex;gap:.55rem;justify-content:flex-end;border-top:1px solid var(--border);}
 .msuccess{display:none;padding:1.8rem 1.5rem;text-align:center;}
 .msuccess.on{display:block;}
@@ -1395,7 +1406,6 @@ footer p{font-size:.72rem;color:var(--muted);}
 
   <!-- Go Live / Live button -->
   <button class="btn btn-ghost" id="goLiveBtn" onclick="openGoLive()">Go Live</button>
-  <button class="btn btn-live-pulse" id="myLiveBtn" style="display:none" onclick="goToMyStream()">Live</button>
 
   <!-- Spacer pushes profile pill to far right -->
   <div class="nav-spacer"></div>
@@ -1435,12 +1445,20 @@ footer p{font-size:.72rem;color:var(--muted);}
 <div class="modal-ov" id="goLiveModal">
   <div class="modal">
     <div id="mForm">
-      <div class="mhd"><div class="mtitle"><span class="mi"></span>Publish Your Stream</div><button class="mclose" onclick="closeGoLive()">x</button></div>
-      <div class="msub">Broadcasts a <span style="color:var(--purple);font-family:'DM Mono',monospace">kind:30311</span> NIP-53 event to your relays.</div>
+      <div class="mhd"><div class="mtitle" id="goLiveModalTitle"><span class="mi"></span>Publish Your Stream</div><button class="mclose" onclick="closeGoLive()">x</button></div>
+      <div class="msub" id="goLiveModalSub">Broadcasts a <span style="color:var(--purple);font-family:'DM Mono',monospace">kind:30311</span> NIP-53 event to your relays.</div>
       <div class="mbody">
+        <div class="go-live-manage" id="goLiveManageWrap">
+          <div class="fg">
+            <label>Your Streams</label>
+            <select id="goLiveStreamSelect" onchange="selectGoLiveStream(this.value)"></select>
+            <div class="go-live-manage-help" id="goLiveManageHint">Select a stream to edit, then save updates.</div>
+          </div>
+        </div>
         <div class="fg-grid">
-          <div class="fg"><label>Stream ID (d-tag)</label><input id="goLiveDTag" type="text" value="my-stream-001"></div>
+          <div class="fg"><label>Stream ID (d-tag)</label><input id="goLiveDTag" type="text" value=""></div>
           <div class="fg"><label>Title</label><input id="goLiveTitle" type="text" value="Late Night Nostr Build Session"></div>
+          <div class="fg full"><label>Event ID</label><input id="goLiveEventId" type="text" value="" readonly placeholder="Will appear after first publish"></div>
           <div class="fg full"><label>Summary</label><textarea id="goLiveSummary">Building a Nostr client from scratch - open Q&amp;A, come hang out!</textarea></div>
           <div class="fg full"><label>Streaming URL (HLS .m3u8 or RTMP)</label><input id="goLiveStreamUrl" type="text" placeholder="https://your-server.com/live/stream.m3u8"></div>
           <div class="fg full"><label>Thumbnail Image URL</label><input id="goLiveThumb" type="text" placeholder="https://your-server.com/thumb.jpg"></div>
@@ -1451,8 +1469,9 @@ footer p{font-size:.72rem;color:var(--muted);}
       </div>
       <div class="mfooter">
         <button class="btn btn-ghost" onclick="closeGoLive()">Cancel</button>
-        <button class="btn btn-ghost">{ } Preview JSON</button>
-        <button class="btn btn-live-pulse" onclick="publishStream()">Go Live Now</button>
+        <button class="btn btn-ghost" onclick="goToMyStream()">View Stream</button>
+        <button class="btn btn-ghost" id="goLiveRemoveBtn" style="display:none;" onclick="removeGoLiveStreamFromList()">Remove From List</button>
+        <button class="btn btn-live-pulse" id="goLivePublishBtn" onclick="publishStream()">Go Live Now</button>
       </div>
     </div>
     <div class="msuccess" id="mSuccess">
@@ -1942,18 +1961,12 @@ footer p{font-size:.72rem;color:var(--muted);}
             </div>
           </div>
           <div class="sib-actions-row">
-            <button class="btn btn-zap" id="theaterZapBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="theaterZap()">⚡ Zap</button>
             <button class="btn btn-follow" id="theaterFollowBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="toggleTheaterFollow()">Follow</button>
-            <button class="action-btn share-btn" onclick="shareStream()">📤 Share</button>
-            <button class="action-btn like-btn" id="likeBtn" onclick="toggleLike()">❤ <span id="likeCount">0</span></button>
-            <button class="action-btn report-btn" title="Report stream">⚑</button>
+            <button class="btn btn-zap" id="theaterZapBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="theaterZap()">Zap</button>
+            <button class="action-btn share-btn" id="theaterShareBtn" onclick="shareStream()">Share</button>
+            <button class="action-btn report-btn" title="Report stream">Report</button>
           </div>
         </div>
-        <div class="stream-reactions-row">
-          <button class="stream-emoji-add" id="streamEmojiAddBtn" onclick="openReactionPickerForStream()">+</button>
-          <div class="stream-emoji-list" id="streamEmojiList"></div>
-        </div>
-
         <!-- Host row (avatar + name/nip05 + hosted-via pill injected by JS) -->
         <div class="sib-host-row">
           <div class="sib-av" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')"></div>
@@ -1978,6 +1991,11 @@ footer p{font-size:.72rem;color:var(--muted);}
         <div class="editable-block" style="margin-top:.5rem">
           <div class="sib-summary">Live jazz set from my home studio. Self-hosted on a $5 VPS - no middlemen, no censorship.</div>
           <button class="block-pencil owner-only visible" title="Edit description"></button>
+        </div>
+        <div class="stream-reactions-row">
+          <button class="stream-emoji-add" id="streamEmojiAddBtn" onclick="openReactionPickerForStream()">+</button>
+          <div class="stream-emoji-list" id="streamEmojiList"></div>
+          <div class="stream-like-counter" id="streamLikeCounter">0 likes</div>
         </div>
       </div>
 
@@ -2016,10 +2034,7 @@ footer p{font-size:.72rem;color:var(--muted);}
           <textarea class="chat-inp" placeholder="Send a message..." rows="2"></textarea>
         </div>
         <div class="chat-acts">
-          <button class="ca-btn zap-ca" onclick="theaterZap()">⚡ Zap</button>
-          <button class="ca-btn" id="emojiBtn" onclick="toggleEmoji(event)">Emoji</button>
           <button class="chat-send-btn">Send</button>
-          <div class="emoji-picker" id="emojiPicker"><div class="ep-grid" id="epGrid"></div></div>
         </div>
       </div>
     </div>
@@ -2203,6 +2218,7 @@ footer p{font-size:.72rem;color:var(--muted);}
 <script src="./nostrflux-app.js"></script>
 </body>
 </html>
+
 
 
 
