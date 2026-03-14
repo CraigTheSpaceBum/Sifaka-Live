@@ -1188,12 +1188,16 @@
       if (p.nip05) avEl.classList.add('nip05-square');
     }
     qs('.ci-title', card).textContent = stream.title;
-    qs('.ci-host', card).textContent = p.nip05 || p.name || shortHex(stream.hostPubkey);
+    qs('.ci-host', card).textContent = p.display_name || p.name || shortHex(stream.hostPubkey);
     const hostedBadge = qs('.ci-hosted-badge', card);
     if (hostedBadge && stream.platformPubkey) {
       const plat = profileFor(stream.platformPubkey);
-      const platName = plat.nip05 ? plat.nip05.replace(/^.*@/, '') : (plat.name || '');
-      if (platName) hostedBadge.textContent = 'via ' + platName;
+      const platDisplayName = plat.display_name || plat.name || '';
+      const hostDisplayName = p.display_name || p.name || '';
+      // Only show if the platform is genuinely different from the streamer
+      if (platDisplayName && platDisplayName !== hostDisplayName) {
+        hostedBadge.textContent = 'via ' + platDisplayName;
+      }
     }
     card.addEventListener('click', () => openStream(stream.address));
     return card;
@@ -1716,22 +1720,27 @@
     const ident = qs('.sib-identity');
     if (ident) ident.textContent = p.nip05 || shortHex(stream.hostPubkey);
 
-    // "Hosted by" flashy box — only shown for platform-proxied streams
-    const sibHostedBy = qs('.sib-hosted-by') || (() => {
-      const el = document.createElement('div');
-      el.className = 'sib-hosted-by';
-      if (ident && ident.parentNode) ident.parentNode.appendChild(el);
-      return el;
-    })();
-    if (sibHostedBy) {
-      if (stream.platformPubkey) {
-        const plat = profileFor(stream.platformPubkey);
-        const platName = plat.nip05
-          ? plat.nip05.replace(/^.*@/, '')
-          : (plat.name || shortHex(stream.platformPubkey));
-        sibHostedBy.innerHTML = `<div class="hosted-by-box"><span class="hosted-by-icon">🎙️</span><span class="hosted-by-text"><span class="hosted-by-label">Hosted via</span><span class="hosted-by-name">${platName}</span></span></div>`;
-      } else {
-        sibHostedBy.innerHTML = '';
+    // Hosted-by box: compact pill, only when platform is genuinely different from streamer
+    let sibHostedBy = qs('.sib-hosted-by');
+    if (!sibHostedBy) {
+      sibHostedBy = document.createElement('div');
+      sibHostedBy.className = 'sib-hosted-by';
+      if (ident && ident.parentNode) ident.parentNode.appendChild(sibHostedBy);
+    }
+    sibHostedBy.innerHTML = '';
+    if (stream.platformPubkey) {
+      const plat = profileFor(stream.platformPubkey);
+      const host = profileFor(stream.hostPubkey);
+      const platName = plat.display_name || plat.name || '';
+      const hostName = host.display_name || host.name || '';
+      if (platName && platName !== hostName) {
+        const platPic = (plat.picture || '').trim();
+        const avHtml = platPic
+          ? `<img src="${platPic}" alt="" onerror="this.style.display='none'">`
+          : `<span class="hosted-by-av-fallback">${platName.charAt(0).toUpperCase()}</span>`;
+        sibHostedBy.innerHTML = `<div class="hosted-by-box"><div class="hosted-by-av">${avHtml}</div><div class="hosted-by-inner"><span class="hosted-by-label">Hosted via</span><span class="hosted-by-name">${platName}</span></div></div>`;
+        const box = sibHostedBy.querySelector('.hosted-by-box');
+        if (box) box.addEventListener('click', () => showProfileByPubkey(stream.platformPubkey));
       }
     }
 
