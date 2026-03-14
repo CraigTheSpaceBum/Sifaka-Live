@@ -1203,13 +1203,12 @@
     return card;
   }
 
-  function hasBrowserPlayableUrl(stream) {
-    const url = (stream.streaming || '').trim();
-    return url && /^https?:\/\//i.test(url);
-  }
-
   function getFilteredStreams() {
-    const allStreams = sortedLiveStreams().filter(hasBrowserPlayableUrl);
+    // Only show streams that have a browser-playable HTTP(S) URL
+    const allStreams = sortedLiveStreams().filter((s) => {
+      const url = (s.streaming || '').trim();
+      return url && /^https?:\/\//i.test(url);
+    });
     const filterPubkeys = getPubkeysForFilter();
     return filterPubkeys
       ? allStreams.filter((s) => filterPubkeys.has(s.pubkey) || filterPubkeys.has(s.hostPubkey))
@@ -1648,23 +1647,17 @@
     playerBg.appendChild(video);
     if (playerUi) playerUi.style.display = 'none';
 
-    const isHlsUrl = /\.m3u8($|\?)/i.test(url) || /zap\.stream|m3u8|hls/i.test(url);
+    const isHlsUrl = /\.m3u8($|\?)/i.test(url) || /zap\.stream\//i.test(url);
 
-    // Detect non-standard HLS URLs (zap.stream uses paths without .m3u8 extension)
-    const isLikelyHls = isHlsUrl || /zap\.stream\//i.test(url);
-
-    if (isLikelyHls) {
-      if (!isHlsUrl && video.canPlayType('video/mp4')) {
-        // Try native first for non-m3u8 URLs
-        video.src = url;
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    if (isHlsUrl) {
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
       } else {
         try {
           const Hls = await ensureHlsJs();
           if (token !== state.playbackToken) return;
           if (Hls.isSupported()) {
-            const hlsCfg = {
+            const hls = new Hls({
               enableWorker: true,
               lowLatencyMode: true,
               maxBufferLength: 30,
@@ -1676,41 +1669,30 @@
               levelLoadingMaxRetry: 4,
               fragLoadingTimeOut: 20000,
               fragLoadingMaxRetry: 4,
-              // Allow cross-origin HLS (zap.stream, etc.)
-              xhrSetup: (xhr, xhrUrl) => {
-                xhr.withCredentials = false;
-              }
-            };
-            const hls = new Hls(hlsCfg);
+              xhrSetup: (xhr) => { xhr.withCredentials = false; }
+            });
             state.hlsInstance = hls;
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               if (token !== state.playbackToken) return;
-              video.play().catch(() => {
-                video.muted = true;
-                video.play().catch(() => {});
-              });
+              video.play().catch(() => { video.muted = true; video.play().catch(() => {}); });
             });
             hls.on(Hls.Events.ERROR, (_event, data) => {
-              if (token !== state.playbackToken) return;
-              if (data && data.fatal) {
-                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                  // Try to recover network errors
-                  try { hls.startLoad(); } catch (_) {
-                    renderPlaybackFallback('Stream connection lost. The stream may have ended.', url);
-                  }
-                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                  try { hls.recoverMediaError(); } catch (_) {
-                    renderPlaybackFallback('Media decode error. Try opening the stream directly.', url);
-                  }
-                } else {
-                  renderPlaybackFallback('HLS playback error. Try opening the stream directly.', url);
+              if (token !== state.playbackToken || !data.fatal) return;
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                try { hls.startLoad(); } catch (_) {
+                  renderPlaybackFallback('Stream connection lost. The stream may have ended.', url);
                 }
+              } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                try { hls.recoverMediaError(); } catch (_) {
+                  renderPlaybackFallback('Media decode error. Try opening the stream directly.', url);
+                }
+              } else {
+                renderPlaybackFallback('HLS playback error. Try opening the stream directly.', url);
               }
             });
-            // Don't call video.play() here — wait for MANIFEST_PARSED
-            return;
+            return; // play triggered via MANIFEST_PARSED
           } else {
             renderPlaybackFallback('HLS is not supported in this browser.', url);
             return;
@@ -1769,18 +1751,14 @@
     const ident = qs('.sib-identity');
     if (ident) ident.textContent = p.nip05 || shortHex(stream.hostPubkey);
 
-    // Hosted-by box: compact pill, only when platform is genuinely different from streamer
-    // Placed inline inside .sib-host-row, to the right of .sib-host-info
+    // Hosted-by box: inline in .sib-host-row to the right of .sib-host-info
     let sibHostedBy = qs('.sib-hosted-by');
     if (!sibHostedBy) {
       sibHostedBy = document.createElement('div');
       sibHostedBy.className = 'sib-hosted-by';
       const hostRow = qs('.sib-host-row');
-      if (hostRow) {
-        hostRow.appendChild(sibHostedBy);
-      } else if (ident && ident.parentNode) {
-        ident.parentNode.appendChild(sibHostedBy);
-      }
+      if (hostRow) hostRow.appendChild(sibHostedBy);
+      else if (ident && ident.parentNode) ident.parentNode.appendChild(sibHostedBy);
     }
     sibHostedBy.innerHTML = '';
     if (stream.platformPubkey) {
@@ -1861,9 +1839,9 @@
   function updateTheaterFollowBtn(pubkey) {
     const btn = qs('#theaterFollowBtn');
     if (!btn) return;
-    const isFollowing = state.followedPubkeys && state.followedPubkeys.has(pubkey);
-    btn.textContent = isFollowing ? '✓ Following' : '+ Follow';
-    btn.classList.toggle('following-active', !!isFollowing);
+    const isFollowing = !!(state.followedPubkeys && state.followedPubkeys.has(pubkey));
+    btn.textContent = isFollowing ? '✓ Unfollow' : '+ Follow';
+    btn.classList.toggle('following-active', isFollowing);
   }
 
   // Debounce timer for relay search
@@ -4837,9 +4815,12 @@
       const stream = state.streamsByAddress.get(state.selectedStreamAddress);
       if (!stream) return;
       if (!state.user) { window.openLogin(); return; }
-      state.selectedProfilePubkey = stream.hostPubkey;
-      toggleFollowSelectedProfile();
-      updateTheaterFollowBtn(stream.hostPubkey);
+      const pubkey = stream.hostPubkey;
+      const next = !isFollowingPubkey(pubkey);
+      setFollowingPubkey(pubkey, next);
+      updateTheaterFollowBtn(pubkey);
+      // Keep profile page in sync if it's open for the same person
+      if (state.selectedProfilePubkey === pubkey) renderProfileFollowButton(pubkey);
     };
 
     // ---- "Also Live Now" reco panel ----

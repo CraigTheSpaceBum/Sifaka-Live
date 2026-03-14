@@ -242,7 +242,7 @@ nav {
 .nav-logo-img{width:26px;height:26px;object-fit:contain;border-radius:4px;flex-shrink:0;margin-right:.1rem;}
 .lm-logo-img{width:38px;height:38px;object-fit:contain;border-radius:6px;}
 .footer-logo-img{width:20px;height:20px;object-fit:contain;border-radius:3px;vertical-align:middle;}
-/* Hosted-by compact pill — inline in .sib-host-row, right of streamer info */
+/* Hosted-by compact pill — inline in .sib-host-row */
 .sib-hosted-by{margin-left:.55rem;display:flex;align-items:center;}
 .hosted-by-box{
   display:inline-flex;align-items:center;gap:.46rem;
@@ -280,8 +280,9 @@ nav {
 .stream-card:nth-child(1){animation-delay:.04s}.stream-card:nth-child(2){animation-delay:.08s}.stream-card:nth-child(3){animation-delay:.12s}.stream-card:nth-child(4){animation-delay:.16s}
 
 /* ======== VIDEO PAGE ======== */
-.video-layout{display:grid;grid-template-columns:1fr var(--sidebar-w);height:calc(100vh - 56px);max-width:1920px;margin:0 auto;width:100%;}
-.video-col{overflow-y:auto;display:flex;flex-direction:column;min-width:0;}
+/* min-height (not height) so the page scrolls naturally on ultrawide */
+.video-layout{display:grid;grid-template-columns:1fr var(--sidebar-w);min-height:calc(100vh - 56px);max-width:1920px;margin:0 auto;width:100%;align-items:start;}
+.video-col{display:flex;flex-direction:column;min-width:0;}
 .player-wrap{position:relative;background:#000;width:100%;aspect-ratio:16/9;flex-shrink:0;}
 .player-bg{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:5rem;background:linear-gradient(135deg,#0a1a28,#180600,#080b12);}
 .player-ui{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 40%);padding:.8rem .95rem;}
@@ -299,8 +300,12 @@ nav {
 /* Stream info */
 .sib{padding:.85rem .95rem;border-bottom:1px solid var(--border);}
 
+/* Top row: title left, action buttons right — directly below the video */
+.sib-top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.65rem;}
+.sib-title-col{flex:1;min-width:0;}
+
 /* Title row with edit pencil */
-.editable-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.65rem;}
+.editable-row{display:flex;align-items:center;gap:.5rem;}
 .sib-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.12rem;letter-spacing:-.02em;}
 .edit-pencil{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.82rem;padding:.18rem .3rem;border-radius:5px;transition:all .15s;opacity:.6;line-height:1;}
 .edit-pencil:hover{background:var(--surface2);color:var(--text);opacity:1;}
@@ -316,10 +321,8 @@ nav {
 .sib-identity{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--muted);margin-top:.06rem;}
 .nip05-text{color:var(--nip05);}
 
-/* Action buttons row (Zap, Follow, Share, Like, Report) */
-.sib-actions-row{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;}
-/* Under-title variant: rendered just below the stream title */
-.sib-actions-under-title{margin-bottom:.6rem;}
+/* Action buttons row (Zap, Follow, Share, Like, Report) — flush right of title */
+.sib-actions-row{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;flex-shrink:0;}
 .action-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.33rem .7rem;cursor:pointer;font-size:.77rem;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:.27rem;transition:all .15s;font-weight:500;}
 .action-btn:hover{border-color:var(--border2);color:var(--text);}
 .action-btn.like-btn:hover,.action-btn.liked{border-color:var(--live);color:var(--live);background:rgba(255,59,92,.08);}
@@ -363,7 +366,7 @@ nav {
 .mini-close{background:rgba(0,0,0,.5);border:none;color:#fff;cursor:pointer;font-size:.75rem;padding:.2rem .35rem;border-radius:4px;line-height:1;}
 
 /* ======== SIDEBAR / CHAT ======== */
-.stream-sidebar{border-left:1px solid var(--border);display:flex;flex-direction:column;height:calc(100vh - 56px);position:sticky;top:56px;overflow:hidden;}
+.stream-sidebar{border-left:1px solid var(--border);display:flex;flex-direction:column;height:calc(100vh - 56px);position:sticky;top:56px;overflow:hidden;align-self:start;}
 .stabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
 .stab{flex:1;padding:.62rem;text-align:center;font-size:.76rem;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;}
 .stab.active{color:var(--text);border-bottom-color:var(--accent);}
@@ -1844,33 +1847,32 @@ footer p{font-size:.72rem;color:var(--muted);}
 
       <!-- Stream info -->
       <div class="sib">
-        <!-- Editable title row -->
-        <div class="editable-row">
-          <div class="sib-title">Indie Jazz Live Set - No Platform, No Rules</div>
-          <!-- Pencil shows only for stream owner -->
-          <button class="edit-pencil owner-only visible" title="Edit title"></button>
+        <!-- Top row: title left, action buttons flush right -->
+        <div class="sib-top-row">
+          <div class="sib-title-col">
+            <div class="editable-row">
+              <div class="sib-title">Indie Jazz Live Set - No Platform, No Rules</div>
+              <button class="edit-pencil owner-only visible" title="Edit title"></button>
+            </div>
+          </div>
+          <div class="sib-actions-row">
+            <button class="btn btn-zap" id="theaterZapBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="theaterZap()">⚡ Zap</button>
+            <button class="btn btn-follow" id="theaterFollowBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="toggleTheaterFollow()">+ Follow</button>
+            <button class="action-btn share-btn" onclick="shareStream()">📤 Share</button>
+            <button class="action-btn like-btn" id="likeBtn" onclick="toggleLike()">❤ <span id="likeCount">0</span></button>
+            <button class="action-btn report-btn" title="Report stream">⚑</button>
+          </div>
         </div>
 
-        <!-- Action buttons: directly under title, aligned left -->
-        <div class="sib-actions-row sib-actions-under-title">
-          <button class="btn btn-zap" id="theaterZapBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="theaterZap()">⚡ Zap</button>
-          <button class="btn btn-follow" id="theaterFollowBtn" style="padding:.36rem .8rem;font-size:.79rem;" onclick="toggleTheaterFollow()">+ Follow</button>
-          <button class="action-btn share-btn" onclick="shareStream()">Share</button>
-          <button class="action-btn like-btn" id="likeBtn" onclick="toggleLike()">❤ <span id="likeCount">0</span></button>
-          <button class="action-btn report-btn" title="Report stream">⚑</button>
-        </div>
-
-        <!-- Host row (avatar + name + hosted-via pill) -->
+        <!-- Host row (avatar + name/nip05 + hosted-via pill injected by JS) -->
         <div class="sib-host-row">
           <div class="sib-av" onclick="showProfile('wavesound','','npub1abc...xyz','wave@bitcoin-cats.ca')"></div>
           <div class="sib-host-info">
             <div class="sib-name">wavesound
               <span class="nip05-badge" title="NIP-05 Verified: wave@bitcoin-cats.ca"></span>
             </div>
-            <!-- NIP-05 shown; npub hidden because they have NIP-05 -->
             <div class="sib-identity nip05-text">wave@bitcoin-cats.ca</div>
           </div>
-          <!-- Hosted-via pill sits here, to the right of streamer info -->
         </div>
 
         <!-- Stats row -->
