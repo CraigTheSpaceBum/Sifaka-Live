@@ -902,6 +902,57 @@
     return normalized === '/' || normalized.toLowerCase() === '/index.html';
   }
 
+  function restoreRouteFromSpaFallbackQuery() {
+    if (!window.location || !window.history || !window.history.replaceState) return;
+    let params = null;
+    try {
+      params = new URLSearchParams(window.location.search || '');
+    } catch (_) {
+      return;
+    }
+    const encoded = params.get('__sifaka_route');
+    if (!encoded) return;
+
+    let rawTarget = encoded;
+    try {
+      rawTarget = decodeURIComponent(encoded);
+    } catch (_) {
+      rawTarget = encoded;
+    }
+
+    let target = String(rawTarget || '').trim();
+    if (!target) return;
+    if (/^https?:\/\//i.test(target)) {
+      try {
+        const u = new URL(target);
+        target = `${u.pathname || '/'}${u.search || ''}${u.hash || ''}`;
+      } catch (_) {
+        // keep parsed target as-is
+      }
+    }
+
+    let hash = '';
+    const hashIdx = target.indexOf('#');
+    if (hashIdx >= 0) {
+      hash = target.slice(hashIdx);
+      target = target.slice(0, hashIdx);
+    }
+    let search = '';
+    const searchIdx = target.indexOf('?');
+    if (searchIdx >= 0) {
+      search = target.slice(searchIdx);
+      target = target.slice(0, searchIdx);
+    }
+    if (!target.startsWith('/')) target = `/${target}`;
+
+    const finalTarget = `${target}${search}${hash}`;
+    try {
+      window.history.replaceState(window.history.state || {}, '', finalTarget);
+    } catch (_) {
+      // ignore
+    }
+  }
+
   function decodePathPart(part) {
     try {
       return decodeURIComponent(part || '');
@@ -7461,6 +7512,7 @@
     loadFollowedPubkeys();
     loadSavedExternalLists();
     applySettingsToDocument();
+    restoreRouteFromSpaFallbackQuery();
 
     bindLegacyGlobals();
     initEmojiPicker();
