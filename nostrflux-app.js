@@ -24,6 +24,9 @@
   const FOLLOWING_STORAGE_KEY = 'nostrflux_following_pubkeys_v1';
   const HIDDEN_ENDED_STREAMS_STORAGE_KEY = 'nostrflux_hidden_ended_streams_v1';
   const NIP05_LOOKUP_CACHE_TTL_MS = 1000 * 60 * 30;
+  const NIP05_LOOKUP_MISS_CACHE_TTL_MS = 1000 * 60 * 3;
+  const NIP05_LOOKUP_ERROR_CACHE_TTL_MS = 1000 * 45;
+  const NIP05_UNVERIFIED_CACHE_TTL_MS = 1000 * 60 * 2;
 
   const DEFAULT_SETTINGS = {
     relays: [...DEFAULT_RELAYS],
@@ -947,6 +950,29 @@
     return row && row.verified ? nip05 : '';
   }
 
+  function normalizeNip05ResolvedPubkey(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const asHex = normalizePubkeyHex(raw);
+    if (asHex) return asHex;
+    const lower = raw.toLowerCase();
+    if (/^npub1[023456789acdefghjklmnpqrstuvwxyz]+$/.test(lower)) {
+      return normalizePubkeyHex(parseNpubMaybe(lower));
+    }
+    return '';
+  }
+
+  function pickNip05NameMatch(names, localPart) {
+    if (!names || typeof names !== 'object') return '';
+    const wanted = String(localPart || '').trim();
+    if (!wanted) return '';
+    if (names[wanted]) return names[wanted];
+    const lowerWanted = wanted.toLowerCase();
+    if (names[lowerWanted]) return names[lowerWanted];
+    const matchKey = Object.keys(names).find((k) => String(k || '').trim().toLowerCase() === lowerWanted);
+    return matchKey ? names[matchKey] : '';
+  }
+
   function refreshNip05DependentUi(pubkey) {
     const normalized = normalizePubkeyHex(pubkey);
     if (!normalized) return;
@@ -987,24 +1013,47 @@
     const now = Date.now();
     const cached = state.nip05LookupCacheByNip05.get(normalized);
     const maxAge = Number(opts.maxAgeMs || NIP05_LOOKUP_CACHE_TTL_MS);
-    if (!opts.force && cached && (now - Number(cached.checkedAt || 0)) < maxAge) {
-      return normalizePubkeyHex(cached.pubkey || '');
+    if (!opts.force && cached) {
+      const age = now - Number(cached.checkedAt || 0);
+      const cachedType = String(cached.resultType || (cached.pubkey ? 'hit' : 'miss'));
+      const ttl = cachedType === 'error'
+        ? NIP05_LOOKUP_ERROR_CACHE_TTL_MS
+        : (cachedType === 'miss' ? Math.min(maxAge, NIP05_LOOKUP_MISS_CACHE_TTL_MS) : maxAge);
+      if (age < ttl) return normalizeNip05ResolvedPubkey(cached.pubkey || '');
     }
 
     const [localPart, domain] = normalized.split('@');
+    const urls = [
+      `https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`,
+      `https://${domain}/.well-known/nostr.json`
+    ];
+
+    let hadResponse = false;
+    let hadNetworkError = false;
     let resolved = '';
-    try {
-      const resp = await fetch(`https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`, { cache: 'no-store' });
-      if (resp.ok) {
-        const data = await resp.json();
+    for (let i = 0; i < urls.length && !resolved; i += 1) {
+      try {
+        const resp = await fetch(urls[i], { cache: 'no-store' });
+        hadResponse = true;
+        if (!resp.ok) continue;
+
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (_) {
+          continue;
+        }
+
         const names = data && data.names && typeof data.names === 'object' ? data.names : {};
-        resolved = normalizePubkeyHex(names[localPart] || names[localPart.toLowerCase()] || '');
+        const candidate = pickNip05NameMatch(names, localPart);
+        resolved = normalizeNip05ResolvedPubkey(candidate || '');
+      } catch (_) {
+        hadNetworkError = true;
       }
-    } catch (_) {
-      resolved = '';
     }
 
-    state.nip05LookupCacheByNip05.set(normalized, { pubkey: resolved, checkedAt: now });
+    const resultType = resolved ? 'hit' : ((hadNetworkError && !hadResponse) ? 'error' : 'miss');
+    state.nip05LookupCacheByNip05.set(normalized, { pubkey: resolved, checkedAt: now, resultType });
     return resolved;
   }
 
@@ -1021,7 +1070,10 @@
 
     const existing = nip05EntryForPubkey(key, nip05);
     const maxAge = Number(opts.maxAgeMs || NIP05_LOOKUP_CACHE_TTL_MS);
-    const existingFresh = existing && (Date.now() - Number(existing.checkedAt || 0)) < maxAge;
+    const existingTtl = existing
+      ? (existing.verified ? maxAge : Math.min(maxAge, NIP05_UNVERIFIED_CACHE_TTL_MS))
+      : 0;
+    const existingFresh = existing && (Date.now() - Number(existing.checkedAt || 0)) < existingTtl;
     if (!opts.force && existingFresh) return !!existing.verified;
     if (state.nip05VerificationPendingByPubkey.has(key)) return !!(existing && existing.verified);
 
